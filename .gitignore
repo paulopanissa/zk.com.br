@@ -1,0 +1,25 @@
+node_modules/
+dist/
+.next/
+.turbo/
+coverage/
+.cache/
+
+# env
+.env
+.env.local
+.env.*.local
+*.env
+
+# OS
+.DS_Store
+Thumbs.db
+
+# logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# editor
+.vscode/settings.json
+.idea/

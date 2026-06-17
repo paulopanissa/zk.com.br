@@ -1,0 +1,1 @@
+// RabbitMQ consumers bootstrap — placeholder

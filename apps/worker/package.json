@@ -1,0 +1,12 @@
+{
+  "name": "@zk/worker",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "ts-node-dev --respawn src/main.ts",
+    "build": "tsc",
+    "test": "jest",
+    "lint": "eslint src --ext .ts",
+    "type-check": "tsc --noEmit"
+  }
+}
