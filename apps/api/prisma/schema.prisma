@@ -518,6 +518,169 @@ model Lot {
   @@map("lots")
 }
 
+// ─── Módulo 18: Config Impostos ───────────────────────────────────────────────
+
+enum TipoImposto {
+  ISS
+  ICMS
+  IPI
+  PIS
+  COFINS
+  DIFAL
+  FCP
+}
+
+enum BaseCalculo {
+  PRECO_VENDA
+  PRECO_COMPRA
+  VALOR_AGREGADO
+}
+
+enum TipoImpostoNcm {
+  IPI
+  PIS
+  COFINS
+  ICMS
+}
+
+model TaxProfile {
+  id                String           @id @default(uuid())
+  nome              String           @db.VarChar(100)
+  regime_tributario RegimeTributario
+  descricao         String?          @db.Text
+  ativo             Boolean          @default(true)
+  padrao            Boolean          @default(false)
+  created_at        DateTime         @default(now())
+  updated_at        DateTime         @updatedAt
+
+  rates TaxRate[]
+
+  @@map("tax_profiles")
+}
+
+model TaxRate {
+  id                  String      @id @default(uuid())
+  profile_id          String
+  imposto             TipoImposto
+  aliquota_percentual Int
+  base_calculo        BaseCalculo
+  incluso_no_preco    Boolean     @default(false)
+  uf_origem           String?     @db.Char(2)
+  uf_destino          String?     @db.Char(2)
+
+  profile TaxProfile @relation(fields: [profile_id], references: [id], onDelete: Cascade)
+
+  @@map("tax_rates")
+}
+
+model NcmTaxOverride {
+  id                  String         @id @default(uuid())
+  ncm                 String         @db.VarChar(8)
+  imposto             TipoImpostoNcm
+  aliquota_percentual Int
+  descricao           String?        @db.VarChar(255)
+
+  @@unique([ncm, imposto])
+  @@map("ncm_tax_overrides")
+}
+
+// ─── Módulo 16: Config Pagamentos ─────────────────────────────────────────────
+
+enum PaymentProviderSlug {
+  ASAAS
+  MERCADO_PAGO
+  STRIPE
+  PAGSEGURO
+  PAYPAL
+}
+
+enum PaymentEnvironment {
+  SANDBOX
+  PRODUCAO
+}
+
+enum PaymentChannel {
+  PDV
+  ECOMMERCE
+}
+
+enum PaymentMethod {
+  CARTAO_CREDITO
+  CARTAO_DEBITO
+  PIX
+  BOLETO
+  DINHEIRO
+  MAQUININHA_POINT
+}
+
+model PaymentProvider {
+  id             String              @id @default(uuid())
+  slug           PaymentProviderSlug @unique
+  nome_exibicao  String              @db.VarChar(100)
+  ativo          Boolean             @default(false)
+  webhook_secret String?             @db.Text
+  created_at     DateTime            @default(now())
+  updated_at     DateTime            @updatedAt
+
+  credentials     PaymentProviderCredential[]
+  channel_configs PaymentChannelConfig[]
+  method_mappings PaymentMethodMapping[]
+
+  @@map("payment_providers")
+}
+
+model PaymentProviderCredential {
+  id          String             @id @default(uuid())
+  provider_id String
+  chave       String             @db.VarChar(100)
+  valor       String             @db.Text
+  ambiente    PaymentEnvironment
+
+  provider PaymentProvider @relation(fields: [provider_id], references: [id], onDelete: Cascade)
+
+  @@unique([provider_id, chave, ambiente])
+  @@map("payment_provider_credentials")
+}
+
+model PaymentChannelConfig {
+  id          String             @id @default(uuid())
+  canal       PaymentChannel     @unique
+  provider_id String
+  ambiente    PaymentEnvironment
+  updated_at  DateTime           @updatedAt
+
+  provider PaymentProvider @relation(fields: [provider_id], references: [id])
+
+  @@map("payment_channel_configs")
+}
+
+model PaymentMethodMapping {
+  id                 String         @id @default(uuid())
+  canal              PaymentChannel
+  metodo             PaymentMethod
+  provider_id        String
+  ativo              Boolean        @default(true)
+  taxa_percentual    Int            @default(0)
+  taxa_fixa_centavos Int            @default(0)
+
+  provider PaymentProvider @relation(fields: [provider_id], references: [id])
+
+  @@unique([canal, metodo])
+  @@map("payment_method_mappings")
+}
+
+model PaymentWebhookEvent {
+  id           String              @id @default(uuid())
+  provider     PaymentProviderSlug
+  event_id     String              @db.VarChar(255)
+  payload      Json
+  processed    Boolean             @default(false)
+  received_at  DateTime            @default(now())
+
+  @@unique([provider, event_id])
+  @@map("payment_webhook_events")
+}
+
 // ─── Módulo 5: Estoque ────────────────────────────────────────────────────────
 
 enum StockMovementType {
