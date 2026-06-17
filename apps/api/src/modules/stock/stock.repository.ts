@@ -1,6 +1,15 @@
 import { ConflictException, Injectable } from '@nestjs/common';
-import { Prisma, StockMovement, StockMovementType } from '@prisma/client';
+import { Prisma, PrismaClient, StockMovement, StockMovementType } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+
+/**
+ * Tipo para um cliente de transação Prisma passado externamente.
+ * Permite que outros serviços participem de uma transação já em andamento.
+ */
+export type PrismaTx = Omit<
+  PrismaClient,
+  '$connect' | '$disconnect' | '$on' | '$transaction' | '$use' | '$extends'
+>;
 
 @Injectable()
 export class StockRepository {
@@ -224,10 +233,117 @@ export class StockRepository {
   // ─── Reserva FIFO ────────────────────────────────────────────────────────────
 
   /**
+   * Reserva estoque em ordem FIFO dentro de uma transação EXISTENTE.
+   *
+   * Use este método quando o chamador já possui uma transação Prisma aberta e
+   * precisa que a baixa de estoque faça parte do mesmo bloco atômico.
+   * Toda a lógica de lock, idempotência e criação de movimentos roda com o `tx`
+   * fornecido — nenhuma nova transação é criada.
+   *
+   * @param tx  Cliente de transação Prisma obtido dentro de um `$transaction`.
+   * @param referenceId  ID do item/entidade que originou a baixa (ex: id do VendaItem).
+   * @returns Array com os lotes alocados e as quantidades consumidas (sempre positivas).
+   * @throws ConflictException se não houver lotes ativos ou estoque insuficiente.
+   */
+  async reserveFifoInTx(
+    tx: PrismaTx,
+    unitId: string,
+    productId: string,
+    quantity: number,
+    idempotencyKey: string,
+    referenceId: string | undefined,
+    createdBy: string,
+  ): Promise<Array<{ lot_id: string; quantity: number }>> {
+    // 1. Verificar idempotência — se já existe, retornar o que foi reservado antes
+    const existingMovements = await tx.stockMovement.findMany({
+      where: {
+        idempotency_key: { startsWith: `${idempotencyKey}_lot_` },
+        type: StockMovementType.SALE_OUT,
+      },
+      select: { lot_id: true, quantity: true },
+    });
+
+    if (existingMovements.length > 0) {
+      return existingMovements.map((m) => ({
+        lot_id: m.lot_id,
+        quantity: Math.abs(parseFloat(m.quantity.toString())),
+      }));
+    }
+
+    // 2. Bloquear lotes ativos do produto em ordem FIFO com SELECT FOR UPDATE
+    type LotRow = { id: string };
+    const lots = await tx.$queryRaw<LotRow[]>`
+      SELECT l.id
+      FROM lots l
+      WHERE l.unidade_id  = ${unitId}
+        AND l.product_id  = ${productId}
+        AND l.active      = true
+      ORDER BY l.expires_at ASC NULLS LAST, l.created_at ASC
+      FOR UPDATE
+    `;
+
+    if (lots.length === 0) {
+      throw new ConflictException('Nenhum lote disponível para este produto');
+    }
+
+    // 3. Calcular saldo de cada lote DENTRO da transação (pós-lock) e alocar FIFO
+    let remaining = quantity;
+    const allocations: Array<{ lot_id: string; quantity: number }> = [];
+
+    for (const lot of lots) {
+      if (remaining <= 0) break;
+
+      const balanceResult = await tx.$queryRaw<[{ balance: string }]>`
+        SELECT COALESCE(SUM(quantity), 0)::text AS balance
+        FROM stock_movements
+        WHERE lot_id     = ${lot.id}
+          AND unidade_id = ${unitId}
+      `;
+      const balance = parseFloat(balanceResult[0]?.balance ?? '0');
+
+      if (balance <= 0) continue;
+
+      const toConsume = Math.min(remaining, balance);
+      allocations.push({ lot_id: lot.id, quantity: toConsume });
+      remaining -= toConsume;
+    }
+
+    if (remaining > 0) {
+      const available = quantity - remaining;
+      throw new ConflictException(
+        `Estoque insuficiente. Disponível: ${available}, necessário: ${quantity}`,
+      );
+    }
+
+    // 4. Inserir StockMovements de saída (quantidade negativa = saída)
+    for (const alloc of allocations) {
+      const ikey = `${idempotencyKey}_lot_${alloc.lot_id}`;
+      await tx.stockMovement.create({
+        data: {
+          unidade_id: unitId,
+          product_id: productId,
+          lot_id: alloc.lot_id,
+          type: StockMovementType.SALE_OUT,
+          quantity: new Prisma.Decimal(-alloc.quantity),
+          reference_id: referenceId ?? null,
+          reference_type: 'venda_item',
+          idempotency_key: ikey,
+          created_by: createdBy,
+        },
+      });
+    }
+
+    return allocations;
+  }
+
+  /**
    * Reserva estoque em ordem FIFO (validade mais próxima primeiro).
    *
    * Usa SELECT FOR UPDATE para prevenir overselling em cenários de alta concorrência.
    * É idempotente: uma segunda chamada com a mesma idempotency_key retorna a alocação original.
+   *
+   * Cria sua própria transação interna. Use `reserveFifoInTx` quando precisar
+   * participar de uma transação externa (ex: checkout de venda).
    *
    * @returns Array com os lotes alocados e as quantidades consumidas (sempre positivas).
    * @throws ConflictException se não houver lotes ativos ou estoque insuficiente.
@@ -241,86 +357,15 @@ export class StockRepository {
     createdBy: string,
   ): Promise<Array<{ lot_id: string; quantity: number }>> {
     return this.prisma.$transaction(async (tx) => {
-      // 1. Verificar idempotência — se já existe, retornar o que foi reservado antes
-      const existingMovements = await tx.stockMovement.findMany({
-        where: {
-          idempotency_key: { startsWith: `${idempotencyKey}_lot_` },
-          type: StockMovementType.SALE_OUT,
-        },
-        select: { lot_id: true, quantity: true },
-      });
-
-      if (existingMovements.length > 0) {
-        return existingMovements.map((m) => ({
-          lot_id: m.lot_id,
-          quantity: Math.abs(parseFloat(m.quantity.toString())),
-        }));
-      }
-
-      // 2. Bloquear lotes ativos do produto em ordem FIFO com SELECT FOR UPDATE
-      type LotRow = { id: string };
-      const lots = await tx.$queryRaw<LotRow[]>`
-        SELECT l.id
-        FROM lots l
-        WHERE l.unidade_id  = ${unitId}
-          AND l.product_id  = ${productId}
-          AND l.active      = true
-        ORDER BY l.expires_at ASC NULLS LAST, l.created_at ASC
-        FOR UPDATE
-      `;
-
-      if (lots.length === 0) {
-        throw new ConflictException('Nenhum lote disponível para este produto');
-      }
-
-      // 3. Calcular saldo de cada lote DENTRO da transação (pós-lock) e alocar FIFO
-      let remaining = quantity;
-      const allocations: Array<{ lot_id: string; quantity: number }> = [];
-
-      for (const lot of lots) {
-        if (remaining <= 0) break;
-
-        const balanceResult = await tx.$queryRaw<[{ balance: string }]>`
-          SELECT COALESCE(SUM(quantity), 0)::text AS balance
-          FROM stock_movements
-          WHERE lot_id     = ${lot.id}
-            AND unidade_id = ${unitId}
-        `;
-        const balance = parseFloat(balanceResult[0]?.balance ?? '0');
-
-        if (balance <= 0) continue;
-
-        const toConsume = Math.min(remaining, balance);
-        allocations.push({ lot_id: lot.id, quantity: toConsume });
-        remaining -= toConsume;
-      }
-
-      if (remaining > 0) {
-        const available = quantity - remaining;
-        throw new ConflictException(
-          `Estoque insuficiente. Disponível: ${available}, necessário: ${quantity}`,
-        );
-      }
-
-      // 4. Inserir StockMovements de saída (quantidade negativa = saída)
-      for (const alloc of allocations) {
-        const ikey = `${idempotencyKey}_lot_${alloc.lot_id}`;
-        await tx.stockMovement.create({
-          data: {
-            unidade_id: unitId,
-            product_id: productId,
-            lot_id: alloc.lot_id,
-            type: StockMovementType.SALE_OUT,
-            quantity: new Prisma.Decimal(-alloc.quantity),
-            reference_id: referenceId ?? null,
-            reference_type: 'SALE',
-            idempotency_key: ikey,
-            created_by: createdBy,
-          },
-        });
-      }
-
-      return allocations;
+      return this.reserveFifoInTx(
+        tx as unknown as PrismaTx,
+        unitId,
+        productId,
+        quantity,
+        idempotencyKey,
+        referenceId,
+        createdBy,
+      );
     });
   }
 }
