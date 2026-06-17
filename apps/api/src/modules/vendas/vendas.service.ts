@@ -6,10 +6,11 @@ import {
   UnprocessableEntityException,
 } from '@nestjs/common';
 import { Decimal } from '@prisma/client/runtime/library';
-import { PaymentMethod, Prisma, VendaOrigem, VendaPaymentStatus, VendaStatus } from '@prisma/client';
+import { AlertType, PaymentMethod, Prisma, VendaOrigem, VendaPaymentStatus, VendaStatus } from '@prisma/client';
 import { JwtSystemPayload } from '../../common/auth/types/jwt-payload.type';
 import { TenancyService } from '../../common/tenancy/tenancy.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { AlertasService } from '../alertas/alertas.service';
 import { CuponsRepository } from '../cupons/cupons.repository';
 import { CouponValidationResult, CuponsService } from '../cupons/cupons.service';
 import { PrismaTx, StockRepository } from '../stock/stock.repository';
@@ -32,6 +33,7 @@ export class VendasService {
     private readonly stockRepository: StockRepository,
     private readonly cuponsService: CuponsService,
     private readonly cuponsRepository: CuponsRepository,
+    private readonly alertasService: AlertasService,
   ) {}
 
   // ─── Venda ───────────────────────────────────────────────────────────────────
@@ -305,6 +307,31 @@ export class VendasService {
         }
       }
     });
+
+    // ── Disparos fire-and-forget — todos em paralelo, sem bloquear resposta ────
+
+    void Promise.allSettled([
+      // Alerta: venda finalizada
+      this.alertasService.dispatch(AlertType.VENDA_FINALIZADA, { unitId, vendaId: id }),
+
+      // Alerta: estoque baixo — uma query por item, todas em paralelo
+      ...venda.items.map(async (item) => {
+        const balance = await this.prisma.$queryRaw<[{ total: string }]>`
+          SELECT COALESCE(SUM(quantity), 0)::text AS total
+          FROM stock_movements
+          WHERE product_id = ${item.product_id}
+            AND unidade_id = ${unitId}
+        `;
+        // Math.round preserva semântica de inteiro: estoque pode ser Decimal no banco
+        const currentStock = Math.round(Number(balance[0]?.total ?? '0'));
+        return this.alertasService.dispatch(AlertType.ESTOQUE_BAIXO, {
+          unitId,
+          productId: item.product_id,
+          vendaId: id,
+          currentStock,
+        });
+      }),
+    ]);
 
     return (await this.repository.findById(id, unitId))!;
   }
