@@ -99,8 +99,14 @@ npm run test:e2e       # testes de integração
 npm run lint           # lint + format check
 ```
 
-- **Migrations:** o ORM/query builder ainda será definido (TypeORM, Prisma ou Knex). Quando definido, registre aqui os comandos de `migration:generate` / `migration:run`. Nunca alterar o schema em produção sem migration versionada.
-- **Infra local:** Postgres, Redis e RabbitMQ via Docker Compose (registrar aqui quando criado).
+- **ORM:** Prisma 5. Schema em `apps/api/prisma/schema.prisma`. Comandos:
+  ```bash
+  pnpm --filter @zk/api prisma:generate   # gera o client após alterar schema
+  pnpm --filter @zk/api prisma:migrate    # cria e aplica migration (dev)
+  pnpm --filter @zk/api prisma:studio     # UI visual do banco
+  ```
+  Nunca alterar schema em produção sem migration versionada.
+- **Infra local:** `docker compose up -d` na raiz sobe Postgres (5432), Redis (6379) e RabbitMQ (5672 + UI 15672). Copie `apps/api/.env.example` → `apps/api/.env` antes de subir a API.
 
 ---
 
@@ -127,6 +133,7 @@ npm run lint           # lint + format check
 | `pagamentos` | Gateways, maquininha Point, PIX, checkout, webhooks, conciliação. |
 | `seguranca-lgpd` | Auth, dados pessoais, criptografia, consentimento, rate limiting, segredos. |
 | `precificacao` | Preço, margem, markup, desconto, centro de custo, calculadora. |
+| `seo-ecommerce` | SEO técnico e de conteúdo do e-commerce — Schema.org JSON-LD, meta tags, Core Web Vitals, URLs, sitemap, robots.txt, paginação. Use ao trabalhar em qualquer página, rota ou dado do e-commerce que afete indexação. |
 
 As skills ficam em `.claude/skills/<nome>/SKILL.md` (commitadas no repo).
 
@@ -141,6 +148,7 @@ Subagentes especializados em `.claude/agents/<nome>.md` (commitados no repo). O 
 | `escritor-de-testes` | Adicionou/alterou lógica de estoque, pagamento, preço, fiscal ou validação; quer testes nos caminhos de risco. |
 | `auditor-seguranca-lgpd` | Antes de releases sensíveis e ao mexer em dados pessoais, auth ou segredos (foco interno/LGPD). |
 | `seguranca-ecommerce` | Mexeu em endpoint público, login de cliente, carrinho, checkout ou pagamento da loja; antes de subir o e-commerce. |
+| `seo-ecommerce` | Ao implementar ou alterar qualquer página, componente, rota ou dado do e-commerce (produto, categoria, home, busca, sitemap); antes de subir o e-commerce para produção. |
 
 ## Configuração do Projeto
 
