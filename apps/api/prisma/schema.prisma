@@ -167,6 +167,7 @@ model Unit {
   cost_centers     CostCenter[]
   cost_items       CostItem[]
   products         Product[]      @relation("UnitProducts")
+  lots             Lot[]
 
   // DB-level: partial unique index on (company_settings_id) WHERE tipo = 'MATRIZ' AND ativa = true
   // Applied via raw migration: CREATE UNIQUE INDEX idx_one_matriz ON units (company_settings_id) WHERE tipo = 'MATRIZ' AND ativa = true;
@@ -398,6 +399,7 @@ model Product {
   delivery  ProductDelivery?
   fiscal    ProductFiscal?
   seo       ProductSeo?
+  lots      Lot[]
 
   @@unique([unidade_id, slug])
   @@unique([unidade_id, sku])
@@ -487,4 +489,28 @@ model ProductSeo {
   product Product @relation(fields: [product_id], references: [id])
 
   @@map("product_seo")
+}
+
+// ─── Módulo 4: Lotes ──────────────────────────────────────────────────────────
+
+model Lot {
+  id                String    @id @default(uuid())
+  unidade_id        String
+  product_id        String
+  invoice_item_id   String?
+  code              String    @db.VarChar(100)
+  expires_at        DateTime? @db.Date
+  manufactured_at   DateTime? @db.Date
+  quantity_received Decimal   @db.Decimal(12, 3)
+  tags              String[]
+  active            Boolean   @default(true)
+  notes             String?   @db.Text
+  created_at        DateTime  @default(now())
+  updated_at        DateTime  @updatedAt
+
+  unit    Unit    @relation(fields: [unidade_id], references: [id])
+  product Product @relation(fields: [product_id], references: [id])
+
+  @@unique([unidade_id, product_id, code])
+  @@map("lots")
 }
