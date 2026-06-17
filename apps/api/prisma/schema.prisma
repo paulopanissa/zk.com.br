@@ -172,6 +172,7 @@ model Unit {
   customer_field_defs      CustomerFieldDefinition[]
   customers                Customer[]
   lgpd_requests            LgpdDataRequest[]          @relation("UnitLgpdRequests")
+  nf_entradas              NfEntrada[]
 
   // DB-level: partial unique index on (company_settings_id) WHERE tipo = 'MATRIZ' AND ativa = true
   // Applied via raw migration: CREATE UNIQUE INDEX idx_one_matriz ON units (company_settings_id) WHERE tipo = 'MATRIZ' AND ativa = true;
@@ -224,6 +225,7 @@ model Brand {
   unit      Unit            @relation(fields: [unidade_id], references: [id])
   suppliers SupplierBrand[]
   products  Product[]
+  nf_entrada_items NfEntradaItem[]
 
   @@unique([unidade_id, slug])
   @@map("brands")
@@ -277,10 +279,11 @@ model Supplier {
   created_at       DateTime              @default(now())
   updated_at       DateTime              @updatedAt
 
-  unit      Unit              @relation(fields: [unidade_id], references: [id])
-  addresses SupplierAddress[]
-  contacts  SupplierContact[]
-  brands    SupplierBrand[]
+  unit        Unit              @relation(fields: [unidade_id], references: [id])
+  addresses   SupplierAddress[]
+  contacts    SupplierContact[]
+  brands      SupplierBrand[]
+  nf_entradas NfEntrada[]
 
   @@unique([unidade_id, document])
   @@map("suppliers")
@@ -395,16 +398,17 @@ model Product {
   created_at        DateTime @default(now())
   updated_at        DateTime @updatedAt
 
-  unit_rel        Unit             @relation("UnitProducts", fields: [unidade_id], references: [id])
-  category        Category?        @relation(fields: [category_id], references: [id])
-  brand           Brand?           @relation(fields: [brand_id], references: [id])
-  pricing         ProductPricing?
-  media           ProductMedia[]
-  delivery        ProductDelivery?
-  fiscal          ProductFiscal?
-  seo             ProductSeo?
-  lots            Lot[]
-  stock_movements StockMovement[]
+  unit_rel         Unit             @relation("UnitProducts", fields: [unidade_id], references: [id])
+  category         Category?        @relation(fields: [category_id], references: [id])
+  brand            Brand?           @relation(fields: [brand_id], references: [id])
+  pricing          ProductPricing?
+  media            ProductMedia[]
+  delivery         ProductDelivery?
+  fiscal           ProductFiscal?
+  seo              ProductSeo?
+  lots             Lot[]
+  stock_movements  StockMovement[]
+  nf_entrada_items NfEntradaItem[]
 
   @@unique([unidade_id, slug])
   @@unique([unidade_id, sku])
@@ -515,6 +519,7 @@ model Lot {
 
   unit             Unit            @relation(fields: [unidade_id], references: [id])
   product          Product         @relation(fields: [product_id], references: [id])
+  invoice_item     NfEntradaItem?  @relation(fields: [invoice_item_id], references: [id])
   stock_movements  StockMovement[]
 
   @@unique([unidade_id, product_id, code])
@@ -843,4 +848,71 @@ model LgpdDataRequest {
   @@index([unidade_id, status])
   @@index([customer_id])
   @@map("lgpd_data_requests")
+}
+
+// ─── Módulo 3: Notas Fiscais de Entrada ───────────────────────────────────────
+
+enum NfEntradaStatus {
+  RASCUNHO
+  CONFIRMADA
+  CANCELADA
+}
+
+model NfEntrada {
+  id            String          @id @default(uuid())
+  unidade_id    String
+  fornecedor_id String?
+  numero        String          @db.VarChar(10)
+  serie         String?         @db.VarChar(3)
+  chave_acesso  String?         @db.Char(44)
+  data_emissao  DateTime        @db.Date
+  data_entrada  DateTime?       @db.Date
+  valor_total   Int
+  status        NfEntradaStatus @default(RASCUNHO)
+  xml_url       String?
+  pdf_url       String?
+  observacao    String?         @db.Text
+  created_by    String
+  created_at    DateTime        @default(now())
+  updated_at    DateTime        @updatedAt
+
+  unidade    Unit            @relation(fields: [unidade_id], references: [id])
+  fornecedor Supplier?       @relation(fields: [fornecedor_id], references: [id])
+  items      NfEntradaItem[]
+
+  @@unique([unidade_id, chave_acesso])
+  @@index([unidade_id, status])
+  @@index([fornecedor_id])
+  @@map("nf_entradas")
+}
+
+model NfEntradaItem {
+  id              String    @id @default(uuid())
+  nf_entrada_id   String
+  numero_item     Int
+  codigo_produto  String?   @db.VarChar(60)
+  ean             String?   @db.VarChar(14)
+  descricao       String    @db.VarChar(500)
+  ncm             String?   @db.VarChar(8)
+  cfop            String?   @db.VarChar(4)
+  unidade_medida  String?   @db.VarChar(6)
+  quantidade      Decimal   @db.Decimal(12, 3)
+  valor_unitario  Int
+  valor_total     Int
+  lote_numero     String?   @db.VarChar(100)
+  data_validade   DateTime? @db.Date
+  data_fabricacao DateTime? @db.Date
+  product_id      String?
+  brand_id        String?
+  created_at      DateTime  @default(now())
+  updated_at      DateTime  @updatedAt
+
+  nf_entrada NfEntrada @relation(fields: [nf_entrada_id], references: [id], onDelete: Cascade)
+  product    Product?  @relation(fields: [product_id], references: [id])
+  brand      Brand?    @relation(fields: [brand_id], references: [id])
+  lots       Lot[]
+
+  @@index([nf_entrada_id])
+  @@index([product_id])
+  @@map("nf_entrada_items")
 }
