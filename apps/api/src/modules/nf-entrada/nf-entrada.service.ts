@@ -217,7 +217,7 @@ export class NfEntradaService {
       if (!brand) throw new NotFoundException('Marca não encontrada nesta unidade');
     }
 
-    return this.repository.updateItem(itemId, id, {
+    return this.repository.updateItem(itemId, id, unitId, {
       ...(dto.product_id !== undefined && { product_id: dto.product_id }),
       ...(dto.brand_id !== undefined && { brand_id: dto.brand_id }),
       ...(dto.lote_numero !== undefined && { lote_numero: dto.lote_numero }),
@@ -283,21 +283,29 @@ export class NfEntradaService {
     const items = await this.repository.findItemsByNf(id, unitId);
 
     await this.prisma.$transaction(async (tx) => {
+      // Re-check status inside transaction to prevent concurrent double-confirm
+      const locked = await tx.nfEntrada.findFirst({
+        where: { id, unidade_id: unitId, status: NfEntradaStatus.RASCUNHO },
+        select: { id: true, numero: true },
+      });
+      if (!locked) {
+        throw new UnprocessableEntityException('Apenas notas em rascunho podem ser confirmadas');
+      }
+
       for (const item of items) {
         const lotCode =
           item.lote_numero ?? `NF${nf.numero}-I${item.numero_item}`;
 
-        const existingLot = await tx.lot.findFirst({
+        // upsert = atomic find-or-create; prevents duplicate lots on concurrent confirms
+        const lot = await tx.lot.upsert({
           where: {
-            unidade_id: unitId,
-            product_id: item.product_id!,
-            code: lotCode,
+            unidade_id_product_id_code: {
+              unidade_id: unitId,
+              product_id: item.product_id!,
+              code: lotCode,
+            },
           },
-          select: { id: true },
-        });
-
-        const lot = existingLot ?? (await tx.lot.create({
-          data: {
+          create: {
             code: lotCode,
             quantity_received: item.quantidade,
             tags: [],
@@ -309,8 +317,9 @@ export class NfEntradaService {
             unidade_id: unitId,
             product_id: item.product_id!,
           },
+          update: {},
           select: { id: true },
-        }));
+        });
 
         await tx.stockMovement.upsert({
           where: {

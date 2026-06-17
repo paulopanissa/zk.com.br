@@ -135,9 +135,18 @@ export class NfEntradaRepository {
     });
   }
 
-  updateItem(itemId: string, nfId: string, data: Prisma.NfEntradaItemUpdateInput): Promise<NfEntradaItem> {
+  updateItem(
+    itemId: string,
+    nfId: string,
+    unitId: string,
+    data: Prisma.NfEntradaItemUpdateInput,
+  ): Promise<NfEntradaItem> {
     return this.prisma.nfEntradaItem.update({
-      where: { id: itemId, nf_entrada_id: nfId },
+      where: {
+        id: itemId,
+        nf_entrada_id: nfId,
+        nf_entrada: { unidade_id: unitId },
+      },
       data,
     });
   }
