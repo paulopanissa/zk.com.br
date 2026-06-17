@@ -6,6 +6,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { RedisModule } from './common/redis/redis.module';
 import { AuthModule } from './common/auth/auth.module';
 import { StorageModule } from './common/storage/storage.module';
+import { CryptoModule } from './common/crypto/crypto.module';
 import { HealthModule } from './health/health.module';
 import { CompanySettingsModule } from './modules/company-settings/company-settings.module';
 import { UnitsModule } from './modules/units/units.module';
@@ -17,6 +18,8 @@ import { ProductsModule } from './modules/products/products.module';
 import { LotsModule } from './modules/lots/lots.module';
 import { PricingEngineModule } from './modules/pricing-engine/pricing-engine.module';
 import { StockModule } from './modules/stock/stock.module';
+import { TaxConfigModule } from './modules/tax-config/tax-config.module';
+import { PaymentConfigModule } from './modules/payment-config/payment-config.module';
 import { TenancyModule } from './common/tenancy/tenancy.module';
 import { JwtSystemGuard } from './common/auth/guards/jwt-system.guard';
 import { RolesGuard } from './common/auth/guards/roles.guard';
@@ -29,6 +32,7 @@ import { RolesGuard } from './common/auth/guards/roles.guard';
     RedisModule,
     AuthModule,
     StorageModule,
+    CryptoModule,
     HealthModule,
     TenancyModule,
     CompanySettingsModule,
@@ -41,6 +45,8 @@ import { RolesGuard } from './common/auth/guards/roles.guard';
     LotsModule,
     PricingEngineModule,
     StockModule,
+    TaxConfigModule,
+    PaymentConfigModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
