@@ -24,6 +24,7 @@ import { CustomersModule } from './modules/customers/customers.module';
 import { SearchModule } from './modules/search/search.module';
 import { LgpdModule } from './modules/lgpd/lgpd.module';
 import { NfEntradaModule } from './modules/nf-entrada/nf-entrada.module';
+import { VendasModule } from './modules/vendas/vendas.module';
 import { TenancyModule } from './common/tenancy/tenancy.module';
 import { JwtSystemGuard } from './common/auth/guards/jwt-system.guard';
 import { RolesGuard } from './common/auth/guards/roles.guard';
@@ -55,6 +56,7 @@ import { RolesGuard } from './common/auth/guards/roles.guard';
     SearchModule,
     LgpdModule,
     NfEntradaModule,
+    VendasModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

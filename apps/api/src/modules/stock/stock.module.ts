@@ -9,6 +9,6 @@ import { StockService } from './stock.service';
   imports: [TenancyModule],
   controllers: [StockController],
   providers: [StockRepository, StockService, StockEventsService],
-  exports: [StockService],
+  exports: [StockService, StockRepository],
 })
 export class StockModule {}

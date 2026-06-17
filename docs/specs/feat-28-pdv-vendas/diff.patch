@@ -1,0 +1,387 @@
+diff --git a/apps/api/prisma/schema.prisma b/apps/api/prisma/schema.prisma
+index 04310b5..4e2ab9f 100644
+--- a/apps/api/prisma/schema.prisma
++++ b/apps/api/prisma/schema.prisma
+@@ -173,6 +173,7 @@ model Unit {
+   customers                Customer[]
+   lgpd_requests            LgpdDataRequest[]          @relation("UnitLgpdRequests")
+   nf_entradas              NfEntrada[]
++  vendas                   Venda[]
+ 
+   // DB-level: partial unique index on (company_settings_id) WHERE tipo = 'MATRIZ' AND ativa = true
+   // Applied via raw migration: CREATE UNIQUE INDEX idx_one_matriz ON units (company_settings_id) WHERE tipo = 'MATRIZ' AND ativa = true;
+@@ -409,6 +410,7 @@ model Product {
+   lots             Lot[]
+   stock_movements  StockMovement[]
+   nf_entrada_items NfEntradaItem[]
++  venda_items      VendaItem[]      @relation("ProductVendaItems")
+ 
+   @@unique([unidade_id, slug])
+   @@unique([unidade_id, sku])
+@@ -805,6 +807,7 @@ model Customer {
+   unit          Unit                @relation(fields: [unidade_id], references: [id])
+   audit_logs    CustomerAuditLog[]
+   lgpd_requests LgpdDataRequest[]   @relation("CustomerLgpdRequests")
++  vendas        Venda[]             @relation("CustomerVendas")
+ 
+   @@index([unidade_id])
+   @@index([cpf_cnpj_hash])
+@@ -916,3 +919,90 @@ model NfEntradaItem {
+   @@index([product_id])
+   @@map("nf_entrada_items")
+ }
++
++// ─── Módulo 28: Vendas (PDV) ──────────────────────────────────────────────────
++
++enum VendaStatus {
++  ABERTA
++  FINALIZADA
++  CANCELADA
++}
++
++enum VendaOrigem {
++  PDV
++  ECOMMERCE
++  PDV_OFFLINE
++}
++
++enum VendaPaymentStatus {
++  PENDENTE
++  PAGO
++  CANCELADO
++}
++
++model Venda {
++  id                      String      @id @default(uuid())
++  unidade_id              String
++  numero                  Int         @default(autoincrement())
++  status                  VendaStatus @default(ABERTA)
++  origem                  VendaOrigem @default(PDV)
++  cliente_id              String?
++  desconto_total_centavos Int         @default(0)
++  total_bruto_centavos    Int         @default(0)
++  total_liquido_centavos  Int         @default(0)
++  observacao              String?     @db.Text
++  created_by              String
++  finalizada_em           DateTime?
++  cancelada_em            DateTime?
++  sync_id                 String?     @unique @db.VarChar(100)
++  created_at              DateTime    @default(now())
++  updated_at              DateTime    @updatedAt
++
++  unit     Unit           @relation(fields: [unidade_id], references: [id])
++  cliente  Customer?      @relation("CustomerVendas", fields: [cliente_id], references: [id])
++  items    VendaItem[]
++  payments VendaPayment[]
++
++  @@index([unidade_id, status])
++  @@index([unidade_id, created_at])
++  @@index([cliente_id])
++  @@map("vendas")
++}
++
++model VendaItem {
++  id                      String   @id @default(uuid())
++  venda_id                String
++  product_id              String
++  numero_item             Int
++  quantidade              Decimal  @db.Decimal(12, 3)
++  preco_unitario_centavos Int
++  desconto_item_centavos  Int      @default(0)
++  total_centavos          Int
++  created_at              DateTime @default(now())
++  updated_at              DateTime @updatedAt
++
++  venda   Venda   @relation(fields: [venda_id], references: [id], onDelete: Cascade)
++  product Product @relation("ProductVendaItems", fields: [product_id], references: [id])
++
++  @@index([venda_id])
++  @@index([product_id])
++  @@map("venda_items")
++}
++
++model VendaPayment {
++  id                      String             @id @default(uuid())
++  venda_id                String
++  metodo                  PaymentMethod
++  valor_centavos          Int
++  status                  VendaPaymentStatus @default(PENDENTE)
++  troco_centavos          Int                @default(0)
++  provider_transaction_id String?            @db.VarChar(255)
++  pago_em                 DateTime?
++  created_at              DateTime           @default(now())
++  updated_at              DateTime           @updatedAt
++
++  venda Venda @relation(fields: [venda_id], references: [id], onDelete: Cascade)
++
++  @@index([venda_id])
++  @@map("venda_payments")
++}
+diff --git a/apps/api/src/app.module.ts b/apps/api/src/app.module.ts
+index 81fd276..07e77dc 100644
+--- a/apps/api/src/app.module.ts
++++ b/apps/api/src/app.module.ts
+@@ -24,6 +24,7 @@ import { CustomersModule } from './modules/customers/customers.module';
+ import { SearchModule } from './modules/search/search.module';
+ import { LgpdModule } from './modules/lgpd/lgpd.module';
+ import { NfEntradaModule } from './modules/nf-entrada/nf-entrada.module';
++import { VendasModule } from './modules/vendas/vendas.module';
+ import { TenancyModule } from './common/tenancy/tenancy.module';
+ import { JwtSystemGuard } from './common/auth/guards/jwt-system.guard';
+ import { RolesGuard } from './common/auth/guards/roles.guard';
+@@ -55,6 +56,7 @@ import { RolesGuard } from './common/auth/guards/roles.guard';
+     SearchModule,
+     LgpdModule,
+     NfEntradaModule,
++    VendasModule,
+   ],
+   providers: [
+     { provide: APP_GUARD, useClass: ThrottlerGuard },
+diff --git a/apps/api/src/modules/stock/stock.module.ts b/apps/api/src/modules/stock/stock.module.ts
+index 074c3bc..326346d 100644
+--- a/apps/api/src/modules/stock/stock.module.ts
++++ b/apps/api/src/modules/stock/stock.module.ts
+@@ -9,6 +9,6 @@ import { StockService } from './stock.service';
+   imports: [TenancyModule],
+   controllers: [StockController],
+   providers: [StockRepository, StockService, StockEventsService],
+-  exports: [StockService],
++  exports: [StockService, StockRepository],
+ })
+ export class StockModule {}
+diff --git a/apps/api/src/modules/stock/stock.repository.ts b/apps/api/src/modules/stock/stock.repository.ts
+index 5874603..c453b2e 100644
+--- a/apps/api/src/modules/stock/stock.repository.ts
++++ b/apps/api/src/modules/stock/stock.repository.ts
+@@ -1,7 +1,16 @@
+ import { ConflictException, Injectable } from '@nestjs/common';
+-import { Prisma, StockMovement, StockMovementType } from '@prisma/client';
++import { Prisma, PrismaClient, StockMovement, StockMovementType } from '@prisma/client';
+ import { PrismaService } from '../../prisma/prisma.service';
+ 
++/**
++ * Tipo para um cliente de transação Prisma passado externamente.
++ * Permite que outros serviços participem de uma transação já em andamento.
++ */
++export type PrismaTx = Omit<
++  PrismaClient,
++  '$connect' | '$disconnect' | '$on' | '$transaction' | '$use' | '$extends'
++>;
++
+ @Injectable()
+ export class StockRepository {
+   constructor(private readonly prisma: PrismaService) {}
+@@ -224,15 +233,20 @@ export class StockRepository {
+   // ─── Reserva FIFO ────────────────────────────────────────────────────────────
+ 
+   /**
+-   * Reserva estoque em ordem FIFO (validade mais próxima primeiro).
++   * Reserva estoque em ordem FIFO dentro de uma transação EXISTENTE.
+    *
+-   * Usa SELECT FOR UPDATE para prevenir overselling em cenários de alta concorrência.
+-   * É idempotente: uma segunda chamada com a mesma idempotency_key retorna a alocação original.
++   * Use este método quando o chamador já possui uma transação Prisma aberta e
++   * precisa que a baixa de estoque faça parte do mesmo bloco atômico.
++   * Toda a lógica de lock, idempotência e criação de movimentos roda com o `tx`
++   * fornecido — nenhuma nova transação é criada.
+    *
++   * @param tx  Cliente de transação Prisma obtido dentro de um `$transaction`.
++   * @param referenceId  ID do item/entidade que originou a baixa (ex: id do VendaItem).
+    * @returns Array com os lotes alocados e as quantidades consumidas (sempre positivas).
+    * @throws ConflictException se não houver lotes ativos ou estoque insuficiente.
+    */
+-  async reserveFifo(
++  async reserveFifoInTx(
++    tx: PrismaTx,
+     unitId: string,
+     productId: string,
+     quantity: number,
+@@ -240,87 +254,118 @@ export class StockRepository {
+     referenceId: string | undefined,
+     createdBy: string,
+   ): Promise<Array<{ lot_id: string; quantity: number }>> {
+-    return this.prisma.$transaction(async (tx) => {
+-      // 1. Verificar idempotência — se já existe, retornar o que foi reservado antes
+-      const existingMovements = await tx.stockMovement.findMany({
+-        where: {
+-          idempotency_key: { startsWith: `${idempotencyKey}_lot_` },
+-          type: StockMovementType.SALE_OUT,
+-        },
+-        select: { lot_id: true, quantity: true },
+-      });
++    // 1. Verificar idempotência — se já existe, retornar o que foi reservado antes
++    const existingMovements = await tx.stockMovement.findMany({
++      where: {
++        idempotency_key: { startsWith: `${idempotencyKey}_lot_` },
++        type: StockMovementType.SALE_OUT,
++      },
++      select: { lot_id: true, quantity: true },
++    });
+ 
+-      if (existingMovements.length > 0) {
+-        return existingMovements.map((m) => ({
+-          lot_id: m.lot_id,
+-          quantity: Math.abs(parseFloat(m.quantity.toString())),
+-        }));
+-      }
++    if (existingMovements.length > 0) {
++      return existingMovements.map((m) => ({
++        lot_id: m.lot_id,
++        quantity: Math.abs(parseFloat(m.quantity.toString())),
++      }));
++    }
+ 
+-      // 2. Bloquear lotes ativos do produto em ordem FIFO com SELECT FOR UPDATE
+-      type LotRow = { id: string };
+-      const lots = await tx.$queryRaw<LotRow[]>`
+-        SELECT l.id
+-        FROM lots l
+-        WHERE l.unidade_id  = ${unitId}
+-          AND l.product_id  = ${productId}
+-          AND l.active      = true
+-        ORDER BY l.expires_at ASC NULLS LAST, l.created_at ASC
+-        FOR UPDATE
+-      `;
++    // 2. Bloquear lotes ativos do produto em ordem FIFO com SELECT FOR UPDATE
++    type LotRow = { id: string };
++    const lots = await tx.$queryRaw<LotRow[]>`
++      SELECT l.id
++      FROM lots l
++      WHERE l.unidade_id  = ${unitId}
++        AND l.product_id  = ${productId}
++        AND l.active      = true
++      ORDER BY l.expires_at ASC NULLS LAST, l.created_at ASC
++      FOR UPDATE
++    `;
+ 
+-      if (lots.length === 0) {
+-        throw new ConflictException('Nenhum lote disponível para este produto');
+-      }
++    if (lots.length === 0) {
++      throw new ConflictException('Nenhum lote disponível para este produto');
++    }
+ 
+-      // 3. Calcular saldo de cada lote DENTRO da transação (pós-lock) e alocar FIFO
+-      let remaining = quantity;
+-      const allocations: Array<{ lot_id: string; quantity: number }> = [];
++    // 3. Calcular saldo de cada lote DENTRO da transação (pós-lock) e alocar FIFO
++    let remaining = quantity;
++    const allocations: Array<{ lot_id: string; quantity: number }> = [];
+ 
+-      for (const lot of lots) {
+-        if (remaining <= 0) break;
++    for (const lot of lots) {
++      if (remaining <= 0) break;
+ 
+-        const balanceResult = await tx.$queryRaw<[{ balance: string }]>`
+-          SELECT COALESCE(SUM(quantity), 0)::text AS balance
+-          FROM stock_movements
+-          WHERE lot_id     = ${lot.id}
+-            AND unidade_id = ${unitId}
+-        `;
+-        const balance = parseFloat(balanceResult[0]?.balance ?? '0');
++      const balanceResult = await tx.$queryRaw<[{ balance: string }]>`
++        SELECT COALESCE(SUM(quantity), 0)::text AS balance
++        FROM stock_movements
++        WHERE lot_id     = ${lot.id}
++          AND unidade_id = ${unitId}
++      `;
++      const balance = parseFloat(balanceResult[0]?.balance ?? '0');
+ 
+-        if (balance <= 0) continue;
++      if (balance <= 0) continue;
+ 
+-        const toConsume = Math.min(remaining, balance);
+-        allocations.push({ lot_id: lot.id, quantity: toConsume });
+-        remaining -= toConsume;
+-      }
++      const toConsume = Math.min(remaining, balance);
++      allocations.push({ lot_id: lot.id, quantity: toConsume });
++      remaining -= toConsume;
++    }
+ 
+-      if (remaining > 0) {
+-        const available = quantity - remaining;
+-        throw new ConflictException(
+-          `Estoque insuficiente. Disponível: ${available}, necessário: ${quantity}`,
+-        );
+-      }
++    if (remaining > 0) {
++      const available = quantity - remaining;
++      throw new ConflictException(
++        `Estoque insuficiente. Disponível: ${available}, necessário: ${quantity}`,
++      );
++    }
+ 
+-      // 4. Inserir StockMovements de saída (quantidade negativa = saída)
+-      for (const alloc of allocations) {
+-        const ikey = `${idempotencyKey}_lot_${alloc.lot_id}`;
+-        await tx.stockMovement.create({
+-          data: {
+-            unidade_id: unitId,
+-            product_id: productId,
+-            lot_id: alloc.lot_id,
+-            type: StockMovementType.SALE_OUT,
+-            quantity: new Prisma.Decimal(-alloc.quantity),
+-            reference_id: referenceId ?? null,
+-            reference_type: 'SALE',
+-            idempotency_key: ikey,
+-            created_by: createdBy,
+-          },
+-        });
+-      }
++    // 4. Inserir StockMovements de saída (quantidade negativa = saída)
++    for (const alloc of allocations) {
++      const ikey = `${idempotencyKey}_lot_${alloc.lot_id}`;
++      await tx.stockMovement.create({
++        data: {
++          unidade_id: unitId,
++          product_id: productId,
++          lot_id: alloc.lot_id,
++          type: StockMovementType.SALE_OUT,
++          quantity: new Prisma.Decimal(-alloc.quantity),
++          reference_id: referenceId ?? null,
++          reference_type: 'venda_item',
++          idempotency_key: ikey,
++          created_by: createdBy,
++        },
++      });
++    }
+ 
+-      return allocations;
++    return allocations;
++  }
++
++  /**
++   * Reserva estoque em ordem FIFO (validade mais próxima primeiro).
++   *
++   * Usa SELECT FOR UPDATE para prevenir overselling em cenários de alta concorrência.
++   * É idempotente: uma segunda chamada com a mesma idempotency_key retorna a alocação original.
++   *
++   * Cria sua própria transação interna. Use `reserveFifoInTx` quando precisar
++   * participar de uma transação externa (ex: checkout de venda).
++   *
++   * @returns Array com os lotes alocados e as quantidades consumidas (sempre positivas).
++   * @throws ConflictException se não houver lotes ativos ou estoque insuficiente.
++   */
++  async reserveFifo(
++    unitId: string,
++    productId: string,
++    quantity: number,
++    idempotencyKey: string,
++    referenceId: string | undefined,
++    createdBy: string,
++  ): Promise<Array<{ lot_id: string; quantity: number }>> {
++    return this.prisma.$transaction(async (tx) => {
++      return this.reserveFifoInTx(
++        tx as unknown as PrismaTx,
++        unitId,
++        productId,
++        quantity,
++        idempotencyKey,
++        referenceId,
++        createdBy,
++      );
+     });
+   }
+ }
