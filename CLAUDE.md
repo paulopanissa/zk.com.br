@@ -150,13 +150,24 @@ Subagentes especializados em `.claude/agents/<nome>.md` (commitados no repo). O 
 | `seguranca-ecommerce` | Mexeu em endpoint público, login de cliente, carrinho, checkout ou pagamento da loja; antes de subir o e-commerce. |
 | `seo-ecommerce` | Ao implementar ou alterar qualquer página, componente, rota ou dado do e-commerce (produto, categoria, home, busca, sitemap); antes de subir o e-commerce para produção. |
 
+## Convenção de Issues
+
+**Toda feature, módulo ou spec do PRD deve ter um GitHub Issue antes da implementação.**
+
+- Crie o issue **antes** de abrir a branch — o número do issue entra no nome da branch: `feat/<ID>-<slug>`
+- O issue é a fonte de rastreabilidade: liga o spec → branch → PR
+- Ao abrir o PR, vincule ao issue no body (`Closes #<ID>`) e mencione no título quando relevante
+- Issues retroativos (trabalho já feito sem issue) devem ser criados e fechados pelo PR correspondente
+
+Isso vale para: novos módulos, endpoints, schemas, migrations, integrações externas. Não se aplica a hotfixes triviais ou refactors isolados de 1 arquivo.
+
 ## Configuração do Projeto
 
 - isLibPackage: false
 - mainBranch: main
 - prBranch: main
 - orchestrator:
-  - taskManager: none
+  - taskManager: github
   - prPlatform: github
   - documentation: local
   - design: none

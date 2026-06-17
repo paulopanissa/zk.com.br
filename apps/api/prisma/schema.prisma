@@ -7,5 +7,192 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// Models will be added as modules are implemented.
-// See docs/specs/docs-prd-modules-spec/ for entity specs.
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum SystemRole {
+  ADMINISTRADOR
+  OPERADOR_ESTOQUE_COMPRAS
+  OPERADOR_PDV
+  DPO
+}
+
+enum TipoDocumento {
+  CNPJ
+  CPF
+}
+
+enum RegimeTributario {
+  SIMPLES
+  LUCRO_PRESUMIDO
+  LUCRO_REAL
+}
+
+enum TipoEmailEmpresa {
+  COMERCIAL
+  FINANCEIRO
+  SUPORTE
+  NFE
+  DPO
+  OUTRO
+}
+
+enum TipoTelefoneEmpresa {
+  COMERCIAL
+  FINANCEIRO
+  SUPORTE
+  WHATSAPP
+  OUTRO
+}
+
+enum TipoEnderecoEmpresa {
+  MATRIZ
+  CORRESPONDENCIA
+  COBRANCA
+}
+
+enum TipoUnidade {
+  MATRIZ
+  FILIAL
+  PONTO_DE_VENDA_MOVEL
+}
+
+// ─── Auth / System Realm ───────────────────────────────────────────────────
+
+model SystemUser {
+  id            String     @id @default(uuid())
+  email         String     @unique
+  password_hash String
+  name          String
+  role          SystemRole
+  unidade_id    String?
+  is_active     Boolean    @default(true)
+  last_login_at DateTime?
+  created_at    DateTime   @default(now())
+  updated_at    DateTime   @updatedAt
+
+  @@map("system_users")
+}
+
+// ─── Módulo 14: Configurações da Empresa ─────────────────────────────────────
+
+model CompanySettings {
+  id                  String              @id @default(uuid())
+  // Garante singleton: só uma linha pode existir (constraint de banco)
+  singleton_key       String              @unique @default("SINGLETON")
+  razao_social        String              @db.VarChar(255)
+  nome_fantasia       String?             @db.VarChar(255)
+  cnpj_cpf            String              @unique @db.VarChar(14)
+  tipo_documento      TipoDocumento
+  inscricao_estadual  String?             @db.VarChar(20)
+  inscricao_municipal String?             @db.VarChar(20)
+  regime_tributario   RegimeTributario
+  logo_url            String?             @db.VarChar(500)
+  site_url            String?             @db.VarChar(500)
+  dpo_email           String?             @db.VarChar(255)
+  created_at          DateTime            @default(now())
+  updated_at          DateTime            @updatedAt
+
+  emails    CompanyEmail[]
+  phones    CompanyPhone[]
+  addresses CompanyAddress[]
+  units     Unit[]
+
+  @@map("company_settings")
+}
+
+model CompanyEmail {
+  id                  String           @id @default(uuid())
+  company_settings_id String
+  tipo                TipoEmailEmpresa
+  email               String           @db.VarChar(255)
+  principal           Boolean          @default(false)
+
+  company_settings CompanySettings @relation(fields: [company_settings_id], references: [id])
+
+  @@map("company_emails")
+}
+
+model CompanyPhone {
+  id                  String              @id @default(uuid())
+  company_settings_id String
+  tipo                TipoTelefoneEmpresa
+  ddi                 String              @default("+55") @db.VarChar(5)
+  numero              String              @db.VarChar(20)
+  principal           Boolean             @default(false)
+
+  company_settings CompanySettings @relation(fields: [company_settings_id], references: [id])
+
+  @@map("company_phones")
+}
+
+model CompanyAddress {
+  id                  String              @id @default(uuid())
+  company_settings_id String
+  tipo                TipoEnderecoEmpresa
+  logradouro          String              @db.VarChar(255)
+  numero              String              @db.VarChar(20)
+  complemento         String?             @db.VarChar(100)
+  bairro              String              @db.VarChar(100)
+  municipio           String              @db.VarChar(100)
+  uf                  String              @db.Char(2)
+  cep                 String              @db.VarChar(8)
+  codigo_ibge         String?             @db.VarChar(7)
+  principal           Boolean             @default(false)
+
+  company_settings CompanySettings @relation(fields: [company_settings_id], references: [id])
+
+  @@map("company_addresses")
+}
+
+// ─── Módulo 15: Unidades / Lojas ─────────────────────────────────────────────
+
+model Unit {
+  id                    String      @id @default(uuid())
+  company_settings_id   String
+  nome                  String      @db.VarChar(255)
+  slug                  String      @unique @db.VarChar(100)
+  tipo                  TipoUnidade
+  cnpj_inscricao        String?     @db.VarChar(20)
+  ativa                 Boolean     @default(true)
+  permite_venda_offline Boolean     @default(false)
+  created_at            DateTime    @default(now())
+  updated_at            DateTime    @updatedAt
+
+  company_settings CompanySettings @relation(fields: [company_settings_id], references: [id])
+  address          UnitAddress?
+  config           UnitConfig?
+
+  // DB-level: partial unique index on (company_settings_id) WHERE tipo = 'MATRIZ' AND ativa = true
+  // Applied via raw migration: CREATE UNIQUE INDEX idx_one_matriz ON units (company_settings_id) WHERE tipo = 'MATRIZ' AND ativa = true;
+  @@map("units")
+}
+
+model UnitAddress {
+  id          String  @id @default(uuid())
+  unit_id     String  @unique
+  logradouro  String  @db.VarChar(255)
+  numero      String  @db.VarChar(20)
+  complemento String? @db.VarChar(100)
+  bairro      String  @db.VarChar(100)
+  municipio   String  @db.VarChar(100)
+  uf          String  @db.Char(2)
+  cep         String  @db.VarChar(8)
+  codigo_ibge String? @db.VarChar(7)
+
+  unit Unit @relation(fields: [unit_id], references: [id])
+
+  @@map("unit_addresses")
+}
+
+model UnitConfig {
+  id                      String  @id @default(uuid())
+  unit_id                 String  @unique
+  estoque_proprio         Boolean @default(true)
+  caixa_proprio           Boolean @default(true)
+  gateway_pdv_override_id String?
+  timezone                String  @default("America/Sao_Paulo") @db.VarChar(50)
+
+  unit Unit @relation(fields: [unit_id], references: [id])
+
+  @@map("unit_configs")
+}
