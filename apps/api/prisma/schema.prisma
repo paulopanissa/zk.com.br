@@ -161,6 +161,8 @@ model Unit {
   company_settings CompanySettings @relation(fields: [company_settings_id], references: [id])
   address          UnitAddress?
   config           UnitConfig?
+  brands           Brand[]
+  categories       Category[]
 
   // DB-level: partial unique index on (company_settings_id) WHERE tipo = 'MATRIZ' AND ativa = true
   // Applied via raw migration: CREATE UNIQUE INDEX idx_one_matriz ON units (company_settings_id) WHERE tipo = 'MATRIZ' AND ativa = true;
@@ -195,4 +197,46 @@ model UnitConfig {
   unit Unit @relation(fields: [unit_id], references: [id])
 
   @@map("unit_configs")
+}
+
+// ─── Módulo 1: Marcas ─────────────────────────────────────────────────────────
+
+model Brand {
+  id               String   @id @default(uuid())
+  unidade_id       String
+  name             String   @db.VarChar(150)
+  slug             String   @db.VarChar(160)
+  logo_url         String?  @db.VarChar(512)
+  logo_storage_key String?  @db.VarChar(512)
+  active           Boolean  @default(true)
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
+
+  unit Unit @relation(fields: [unidade_id], references: [id])
+
+  @@unique([unidade_id, slug])
+  @@map("brands")
+}
+
+// ─── Módulo 6: Categorias / Subcategorias ─────────────────────────────────────
+
+model Category {
+  id                String     @id @default(uuid())
+  unidade_id        String
+  parent_id         String?
+  name              String     @db.VarChar(150)
+  slug              String     @db.VarChar(160)
+  description       String?    @db.Text
+  image_url         String?    @db.VarChar(512)
+  image_storage_key String?    @db.VarChar(512)
+  sort_order        Int        @default(0)
+  active            Boolean    @default(true)
+  created_at        DateTime   @default(now())
+  updated_at        DateTime   @updatedAt
+
+  unit     Unit       @relation(fields: [unidade_id], references: [id])
+  parent   Category?  @relation("CategoryChildren", fields: [parent_id], references: [id])
+  children Category[] @relation("CategoryChildren")
+
+  @@map("categories")
 }

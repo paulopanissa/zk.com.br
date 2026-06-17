@@ -1,0 +1,2 @@
+Módulo Categories criado em apps/api/src/modules/categories/ com controller, service, repository e 4 DTOs. Schema Prisma atualizado com model Category (self-relation 2 níveis) e client regenerado. TypeScript compilou sem erros (tsc --noEmit); lint não executado — eslint não está instalado no projeto (ausente em devDependencies).
+TODOs: (1) migration prisma:migrate para criar tabela categories; (2) countProducts no repository quando modelo Product existir; (3) endpoints de imagem upload/remoção quando storage S3/R2 for configurado; (4) registrar CategoriesModule no AppModule.

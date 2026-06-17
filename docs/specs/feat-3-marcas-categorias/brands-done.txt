@@ -1,0 +1,3 @@
+TenancyModule (@Global) criado em apps/api/src/common/tenancy/ — resolve unidade_id do JWT ou cai para MATRIZ ativa.
+Módulo brands criado em apps/api/src/modules/brands/ com controller, service, repository e 3 DTOs; todas as rotas protegidas com RBAC (ADMINISTRADOR).
+Pendências: (1) migration `brands` ainda não aplicada — rodar pnpm --filter @zk/api prisma:migrate; (2) countProductLinks retorna 0 até Product model existir; (3) endpoints de logo aguardam módulo de storage.

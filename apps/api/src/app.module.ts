@@ -8,6 +8,9 @@ import { AuthModule } from './common/auth/auth.module';
 import { HealthModule } from './health/health.module';
 import { CompanySettingsModule } from './modules/company-settings/company-settings.module';
 import { UnitsModule } from './modules/units/units.module';
+import { BrandsModule } from './modules/brands/brands.module';
+import { CategoriesModule } from './modules/categories/categories.module';
+import { TenancyModule } from './common/tenancy/tenancy.module';
 import { JwtSystemGuard } from './common/auth/guards/jwt-system.guard';
 import { RolesGuard } from './common/auth/guards/roles.guard';
 
@@ -19,8 +22,11 @@ import { RolesGuard } from './common/auth/guards/roles.guard';
     RedisModule,
     AuthModule,
     HealthModule,
+    TenancyModule,
     CompanySettingsModule,
     UnitsModule,
+    BrandsModule,
+    CategoriesModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
