@@ -7,5 +7,26 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// Models will be added as modules are implemented.
-// See docs/specs/docs-prd-modules-spec/ for entity specs.
+// ─── Auth / System Realm ───────────────────────────────────────────────────
+
+enum SystemRole {
+  ADMINISTRADOR
+  OPERADOR_ESTOQUE_COMPRAS
+  OPERADOR_PDV
+  DPO
+}
+
+model SystemUser {
+  id            String     @id @default(uuid())
+  email         String     @unique
+  password_hash String
+  name          String
+  role          SystemRole
+  unidade_id    String?
+  is_active     Boolean    @default(true)
+  last_login_at DateTime?
+  created_at    DateTime   @default(now())
+  updated_at    DateTime   @updatedAt
+
+  @@map("system_users")
+}
