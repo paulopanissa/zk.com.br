@@ -175,6 +175,7 @@ model Unit {
   nf_entradas              NfEntrada[]
   vendas                   Venda[]
   coupons                  Coupon[]
+  alert_rules              AlertRule[]            @relation("UnitAlertRules")
 
   // DB-level: partial unique index on (company_settings_id) WHERE tipo = 'MATRIZ' AND ativa = true
   // Applied via raw migration: CREATE UNIQUE INDEX idx_one_matriz ON units (company_settings_id) WHERE tipo = 'MATRIZ' AND ativa = true;
@@ -413,6 +414,7 @@ model Product {
   nf_entrada_items NfEntradaItem[]
   venda_items      VendaItem[]      @relation("ProductVendaItems")
   coupons          Coupon[]         @relation("ProductCoupons")
+  alert_rules      AlertRule[]      @relation("ProductAlertRules")
 
   @@unique([unidade_id, slug])
   @@unique([unidade_id, sku])
@@ -1007,6 +1009,59 @@ model VendaPayment {
 
   @@index([venda_id])
   @@map("venda_payments")
+}
+
+// ─── Módulo 20: Alertas & Notificações ───────────────────────────────────────
+
+enum AlertType {
+  ESTOQUE_BAIXO
+  MARGEM_BAIXA
+  VENDA_FINALIZADA
+  CUPOM_ESGOTADO
+}
+
+enum AlertThresholdUnit {
+  UNIDADES
+  BPS
+  NENHUM
+}
+
+model AlertRule {
+  id              String             @id @default(uuid())
+  unidade_id      String
+  type            AlertType
+  name            String             @db.VarChar(100)
+  active          Boolean            @default(true)
+  threshold_value Int                @default(0)
+  threshold_unit  AlertThresholdUnit @default(NENHUM)
+  product_id      String?
+  created_by      String
+  created_at      DateTime           @default(now())
+  updated_at      DateTime           @updatedAt
+
+  unit    Unit          @relation("UnitAlertRules", fields: [unidade_id], references: [id])
+  product Product?      @relation("ProductAlertRules", fields: [product_id], references: [id])
+  events  AlertEvent[]
+
+  @@index([unidade_id, type, active])
+  @@map("alert_rules")
+}
+
+model AlertEvent {
+  id           String    @id @default(uuid())
+  rule_id      String
+  unidade_id   String
+  type         AlertType
+  context_id   String?   @db.VarChar(255)
+  context_type String?   @db.VarChar(50)
+  message      String    @db.VarChar(500)
+  created_at   DateTime  @default(now())
+
+  rule AlertRule @relation(fields: [rule_id], references: [id], onDelete: Cascade)
+
+  @@index([unidade_id, type, created_at])
+  @@index([rule_id])
+  @@map("alert_events")
 }
 
 // ─── Módulo 10: Cupons ────────────────────────────────────────────────────────
