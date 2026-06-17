@@ -6,6 +6,8 @@ import { PrismaModule } from './prisma/prisma.module';
 import { RedisModule } from './common/redis/redis.module';
 import { AuthModule } from './common/auth/auth.module';
 import { HealthModule } from './health/health.module';
+import { CompanySettingsModule } from './modules/company-settings/company-settings.module';
+import { UnitsModule } from './modules/units/units.module';
 import { JwtSystemGuard } from './common/auth/guards/jwt-system.guard';
 import { RolesGuard } from './common/auth/guards/roles.guard';
 
@@ -17,6 +19,8 @@ import { RolesGuard } from './common/auth/guards/roles.guard';
     RedisModule,
     AuthModule,
     HealthModule,
+    CompanySettingsModule,
+    UnitsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
