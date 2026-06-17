@@ -38,7 +38,7 @@ export class NfEntradaController {
 
   @Post('from-xml')
   @Roles(SystemRole.ADMINISTRADOR, SystemRole.OPERADOR_ESTOQUE_COMPRAS)
-  @UseInterceptors(FileInterceptor('xml'))
+  @UseInterceptors(FileInterceptor('xml', { limits: { fileSize: 10 * 1024 * 1024 } }))
   @ApiConsumes('multipart/form-data')
   @ApiOperation({
     summary: 'Upload XML NFe — parsing + criação automática de rascunho',
@@ -142,7 +142,7 @@ export class NfEntradaController {
 
   @Post(':id/attach-pdf')
   @Roles(SystemRole.ADMINISTRADOR, SystemRole.OPERADOR_ESTOQUE_COMPRAS)
-  @UseInterceptors(FileInterceptor('pdf'))
+  @UseInterceptors(FileInterceptor('pdf', { limits: { fileSize: 10 * 1024 * 1024 } }))
   @ApiConsumes('multipart/form-data')
   @ApiParam({ name: 'id', description: 'ID da NF de entrada' })
   @ApiOperation({

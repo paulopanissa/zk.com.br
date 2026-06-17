@@ -32,6 +32,7 @@ const parser = new XMLParser({
   ignoreAttributes: false,
   attributeNamePrefix: '@_',
   parseTagValue: false,
+  processEntities: false,
   isArray: (name) => name === 'det' || name === 'rastro',
 });
 
