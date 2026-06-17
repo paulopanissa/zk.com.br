@@ -163,6 +163,9 @@ model Unit {
   config           UnitConfig?
   brands           Brand[]
   categories       Category[]
+  suppliers        Supplier[]
+  cost_centers     CostCenter[]
+  cost_items       CostItem[]
 
   // DB-level: partial unique index on (company_settings_id) WHERE tipo = 'MATRIZ' AND ativa = true
   // Applied via raw migration: CREATE UNIQUE INDEX idx_one_matriz ON units (company_settings_id) WHERE tipo = 'MATRIZ' AND ativa = true;
@@ -212,7 +215,8 @@ model Brand {
   created_at       DateTime @default(now())
   updated_at       DateTime @updatedAt
 
-  unit Unit @relation(fields: [unidade_id], references: [id])
+  unit      Unit            @relation(fields: [unidade_id], references: [id])
+  suppliers SupplierBrand[]
 
   @@unique([unidade_id, slug])
   @@map("brands")
@@ -239,4 +243,121 @@ model Category {
   children Category[] @relation("CategoryChildren")
 
   @@map("categories")
+}
+
+// ─── Módulo 2: Fornecedores ───────────────────────────────────────────────────
+
+enum TipoDocumentoSupplier {
+  CNPJ
+  CPF
+}
+
+model Supplier {
+  id               String                @id @default(uuid())
+  unidade_id       String
+  document         String                @db.VarChar(14)
+  document_type    TipoDocumentoSupplier
+  razao_social     String                @db.VarChar(200)
+  nome_fantasia    String?               @db.VarChar(200)
+  email            String?               @db.VarChar(255)
+  phone            String?               @db.VarChar(20)
+  website          String?               @db.VarChar(512)
+  logo_url         String?               @db.VarChar(512)
+  logo_storage_key String?               @db.VarChar(512)
+  active           Boolean               @default(true)
+  notes            String?               @db.Text
+  created_at       DateTime              @default(now())
+  updated_at       DateTime              @updatedAt
+
+  unit      Unit              @relation(fields: [unidade_id], references: [id])
+  addresses SupplierAddress[]
+  contacts  SupplierContact[]
+  brands    SupplierBrand[]
+
+  @@unique([unidade_id, document])
+  @@map("suppliers")
+}
+
+model SupplierAddress {
+  id          String   @id @default(uuid())
+  supplier_id String
+  label       String   @db.VarChar(50)
+  cep         String   @db.VarChar(8)
+  logradouro  String   @db.VarChar(200)
+  numero      String   @db.VarChar(20)
+  complemento String?  @db.VarChar(100)
+  bairro      String   @db.VarChar(100)
+  cidade      String   @db.VarChar(100)
+  estado      String   @db.Char(2)
+  created_at  DateTime @default(now())
+
+  supplier Supplier @relation(fields: [supplier_id], references: [id])
+
+  @@map("supplier_addresses")
+}
+
+model SupplierContact {
+  id          String   @id @default(uuid())
+  supplier_id String
+  name        String   @db.VarChar(150)
+  role        String?  @db.VarChar(100)
+  email       String?  @db.VarChar(255)
+  phone       String?  @db.VarChar(20)
+  created_at  DateTime @default(now())
+
+  supplier Supplier @relation(fields: [supplier_id], references: [id])
+
+  @@map("supplier_contacts")
+}
+
+model SupplierBrand {
+  supplier_id String
+  brand_id    String
+
+  supplier Supplier @relation(fields: [supplier_id], references: [id])
+  brand    Brand    @relation(fields: [brand_id], references: [id])
+
+  @@id([supplier_id, brand_id])
+  @@map("supplier_brands")
+}
+
+// ─── Módulo 8: Centro de Custo ────────────────────────────────────────────────
+
+enum TipoCusto {
+  FIXO
+  VARIAVEL
+}
+
+model CostCenter {
+  id         String   @id @default(uuid())
+  unidade_id String
+  nome       String   @db.VarChar(120)
+  descricao  String?  @db.Text
+  ativo      Boolean  @default(true)
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  unit  Unit       @relation(fields: [unidade_id], references: [id])
+  items CostItem[]
+
+  @@map("cost_centers")
+}
+
+model CostItem {
+  id             String    @id @default(uuid())
+  cost_center_id String
+  unidade_id     String
+  nome           String    @db.VarChar(120)
+  tipo           TipoCusto
+  valor_centavos Int?
+  percentual_bps Int?
+  descricao      String?   @db.Text
+  ativo          Boolean   @default(true)
+  created_at     DateTime  @default(now())
+  updated_at     DateTime  @updatedAt
+
+  cost_center CostCenter @relation(fields: [cost_center_id], references: [id])
+  unit        Unit       @relation(fields: [unidade_id], references: [id])
+
+  @@map("cost_items")
 }
