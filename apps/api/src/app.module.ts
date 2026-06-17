@@ -12,6 +12,7 @@ import { BrandsModule } from './modules/brands/brands.module';
 import { CategoriesModule } from './modules/categories/categories.module';
 import { SuppliersModule } from './modules/suppliers/suppliers.module';
 import { CostCenterModule } from './modules/cost-center/cost-center.module';
+import { ProductsModule } from './modules/products/products.module';
 import { TenancyModule } from './common/tenancy/tenancy.module';
 import { JwtSystemGuard } from './common/auth/guards/jwt-system.guard';
 import { RolesGuard } from './common/auth/guards/roles.guard';
@@ -31,6 +32,7 @@ import { RolesGuard } from './common/auth/guards/roles.guard';
     CategoriesModule,
     SuppliersModule,
     CostCenterModule,
+    ProductsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

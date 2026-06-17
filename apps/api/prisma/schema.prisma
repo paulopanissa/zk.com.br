@@ -166,6 +166,7 @@ model Unit {
   suppliers        Supplier[]
   cost_centers     CostCenter[]
   cost_items       CostItem[]
+  products         Product[]      @relation("UnitProducts")
 
   // DB-level: partial unique index on (company_settings_id) WHERE tipo = 'MATRIZ' AND ativa = true
   // Applied via raw migration: CREATE UNIQUE INDEX idx_one_matriz ON units (company_settings_id) WHERE tipo = 'MATRIZ' AND ativa = true;
@@ -217,6 +218,7 @@ model Brand {
 
   unit      Unit            @relation(fields: [unidade_id], references: [id])
   suppliers SupplierBrand[]
+  products  Product[]
 
   @@unique([unidade_id, slug])
   @@map("brands")
@@ -241,6 +243,7 @@ model Category {
   unit     Unit       @relation(fields: [unidade_id], references: [id])
   parent   Category?  @relation("CategoryChildren", fields: [parent_id], references: [id])
   children Category[] @relation("CategoryChildren")
+  products Product[]
 
   @@map("categories")
 }
@@ -360,4 +363,128 @@ model CostItem {
   unit        Unit       @relation(fields: [unidade_id], references: [id])
 
   @@map("cost_items")
+}
+
+// ─── Módulo 7: Produtos ───────────────────────────────────────────────────────
+
+enum MediaType {
+  IMAGE
+  VIDEO
+}
+
+model Product {
+  id                String   @id @default(uuid())
+  unidade_id        String
+  category_id       String?
+  brand_id          String?
+  name              String   @db.VarChar(300)
+  slug              String   @db.VarChar(320)
+  sku               String?  @db.VarChar(100)
+  barcode           String?  @db.VarChar(50)
+  description       String?  @db.Text
+  short_description String?  @db.VarChar(500)
+  unit              String   @default("UN") @db.VarChar(10)
+  active            Boolean  @default(true)
+  featured          Boolean  @default(false)
+  min_stock         Int      @default(0)
+  created_at        DateTime @default(now())
+  updated_at        DateTime @updatedAt
+
+  unit_rel  Unit             @relation("UnitProducts", fields: [unidade_id], references: [id])
+  category  Category?        @relation(fields: [category_id], references: [id])
+  brand     Brand?           @relation(fields: [brand_id], references: [id])
+  pricing   ProductPricing?
+  media     ProductMedia[]
+  delivery  ProductDelivery?
+  fiscal    ProductFiscal?
+  seo       ProductSeo?
+
+  @@unique([unidade_id, slug])
+  @@unique([unidade_id, sku])
+  @@unique([unidade_id, barcode])
+  @@map("products")
+}
+
+model ProductPricing {
+  id                      String    @id @default(uuid())
+  product_id              String    @unique
+  cost_price_cents        Int       @default(0)
+  sale_price_cents        Int       @default(0)
+  promotional_price_cents Int?
+  promotional_starts_at   DateTime?
+  promotional_ends_at     DateTime?
+  discount_enabled        Boolean   @default(false)
+  max_discount_pct        Decimal?  @db.Decimal(5, 2)
+  margin_pct              Decimal?  @db.Decimal(8, 4)
+  margin_cents            Int?
+
+  product Product @relation(fields: [product_id], references: [id])
+
+  @@map("product_pricing")
+}
+
+model ProductMedia {
+  id          String    @id @default(uuid())
+  product_id  String
+  storage_key String    @db.VarChar(512)
+  url         String    @db.VarChar(512)
+  media_type  MediaType
+  alt_text    String?   @db.VarChar(255)
+  sort_order  Int       @default(0)
+  created_at  DateTime  @default(now())
+
+  product Product @relation(fields: [product_id], references: [id])
+
+  @@map("product_media")
+}
+
+model ProductDelivery {
+  id               String   @id @default(uuid())
+  product_id       String   @unique
+  weight_grams     Int?
+  height_cm        Decimal? @db.Decimal(8, 2)
+  width_cm         Decimal? @db.Decimal(8, 2)
+  depth_cm         Decimal? @db.Decimal(8, 2)
+  free_shipping    Boolean  @default(false)
+  ships_from_store Boolean  @default(true)
+
+  product Product @relation(fields: [product_id], references: [id])
+
+  @@map("product_delivery")
+}
+
+model ProductFiscal {
+  id              String   @id @default(uuid())
+  product_id      String   @unique
+  ncm             String?  @db.VarChar(8)
+  cfop            String?  @db.VarChar(5)
+  cest            String?  @db.VarChar(7)
+  origem          Int?
+  cst_icms        String?  @db.VarChar(3)
+  csosn           String?  @db.VarChar(3)
+  cst_pis         String?  @db.VarChar(2)
+  cst_cofins      String?  @db.VarChar(2)
+  cst_ipi         String?  @db.VarChar(2)
+  aliquota_icms   Decimal? @db.Decimal(5, 2)
+  aliquota_pis    Decimal? @db.Decimal(5, 2)
+  aliquota_cofins Decimal? @db.Decimal(5, 2)
+  aliquota_ipi    Decimal? @db.Decimal(5, 2)
+
+  product Product @relation(fields: [product_id], references: [id])
+
+  @@map("product_fiscal")
+}
+
+model ProductSeo {
+  id                      String    @id @default(uuid())
+  product_id              String    @unique
+  seo_title               String?   @db.VarChar(70)
+  seo_description         String?   @db.VarChar(160)
+  seo_keywords            String[]
+  schema_org_json         Json?
+  schema_org_generated_at DateTime?
+
+  product Product @relation(fields: [product_id], references: [id])
+
+  @@map("product_seo")
 }
