@@ -178,6 +178,7 @@ model Unit {
   alert_rules              AlertRule[]            @relation("UnitAlertRules")
   delivery_config          DeliveryConfig?
   deliveries               Delivery[]
+  ai_api_keys              AiApiKey[]
 
   // DB-level: partial unique index on (company_settings_id) WHERE tipo = 'MATRIZ' AND ativa = true
   // Applied via raw migration: CREATE UNIQUE INDEX idx_one_matriz ON units (company_settings_id) WHERE tipo = 'MATRIZ' AND ativa = true;
@@ -1180,4 +1181,35 @@ model Delivery {
   @@index([unidade_id, status])
   @@index([unidade_id, created_at])
   @@map("deliveries")
+}
+
+// ─── Módulo 19: API Keys de IA ────────────────────────────────────────────────
+
+enum AiProvider {
+  OPENAI
+  DEEPSEEK
+  GOOGLE_GEMINI
+  ANTHROPIC
+}
+
+model AiApiKey {
+  id                   String      @id @default(uuid())
+  unidade_id           String
+  provider             AiProvider
+  label                String      @db.VarChar(100)
+  key_encrypted        String      @db.Text
+  key_prefix           String      @db.VarChar(10)
+  key_suffix           String      @db.VarChar(10)
+  active               Boolean     @default(true)
+  last_tested_at       DateTime?
+  last_test_ok         Boolean?
+  last_test_latency_ms Int?
+  created_at           DateTime    @default(now())
+  updated_at           DateTime    @updatedAt
+
+  unit Unit @relation(fields: [unidade_id], references: [id])
+
+  @@unique([unidade_id, provider, label])
+  @@index([unidade_id, provider])
+  @@map("ai_api_keys")
 }

@@ -1,0 +1,188 @@
+diff --git a/apps/api/prisma/schema.prisma b/apps/api/prisma/schema.prisma
+index ef3edc7..8bd793d 100644
+--- a/apps/api/prisma/schema.prisma
++++ b/apps/api/prisma/schema.prisma
+@@ -163,6 +163,9 @@ model Unit {
+   config           UnitConfig?
+   brands           Brand[]
+   categories       Category[]
++  suppliers        Supplier[]
++  cost_centers     CostCenter[]
++  cost_items       CostItem[]
+ 
+   // DB-level: partial unique index on (company_settings_id) WHERE tipo = 'MATRIZ' AND ativa = true
+   // Applied via raw migration: CREATE UNIQUE INDEX idx_one_matriz ON units (company_settings_id) WHERE tipo = 'MATRIZ' AND ativa = true;
+@@ -212,7 +215,8 @@ model Brand {
+   created_at       DateTime @default(now())
+   updated_at       DateTime @updatedAt
+ 
+-  unit Unit @relation(fields: [unidade_id], references: [id])
++  unit      Unit            @relation(fields: [unidade_id], references: [id])
++  suppliers SupplierBrand[]
+ 
+   @@unique([unidade_id, slug])
+   @@map("brands")
+@@ -240,3 +244,120 @@ model Category {
+ 
+   @@map("categories")
+ }
++
++// ─── Módulo 2: Fornecedores ───────────────────────────────────────────────────
++
++enum TipoDocumentoSupplier {
++  CNPJ
++  CPF
++}
++
++model Supplier {
++  id               String                @id @default(uuid())
++  unidade_id       String
++  document         String                @db.VarChar(14)
++  document_type    TipoDocumentoSupplier
++  razao_social     String                @db.VarChar(200)
++  nome_fantasia    String?               @db.VarChar(200)
++  email            String?               @db.VarChar(255)
++  phone            String?               @db.VarChar(20)
++  website          String?               @db.VarChar(512)
++  logo_url         String?               @db.VarChar(512)
++  logo_storage_key String?               @db.VarChar(512)
++  active           Boolean               @default(true)
++  notes            String?               @db.Text
++  created_at       DateTime              @default(now())
++  updated_at       DateTime              @updatedAt
++
++  unit      Unit              @relation(fields: [unidade_id], references: [id])
++  addresses SupplierAddress[]
++  contacts  SupplierContact[]
++  brands    SupplierBrand[]
++
++  @@unique([unidade_id, document])
++  @@map("suppliers")
++}
++
++model SupplierAddress {
++  id          String   @id @default(uuid())
++  supplier_id String
++  label       String   @db.VarChar(50)
++  cep         String   @db.VarChar(8)
++  logradouro  String   @db.VarChar(200)
++  numero      String   @db.VarChar(20)
++  complemento String?  @db.VarChar(100)
++  bairro      String   @db.VarChar(100)
++  cidade      String   @db.VarChar(100)
++  estado      String   @db.Char(2)
++  created_at  DateTime @default(now())
++
++  supplier Supplier @relation(fields: [supplier_id], references: [id])
++
++  @@map("supplier_addresses")
++}
++
++model SupplierContact {
++  id          String   @id @default(uuid())
++  supplier_id String
++  name        String   @db.VarChar(150)
++  role        String?  @db.VarChar(100)
++  email       String?  @db.VarChar(255)
++  phone       String?  @db.VarChar(20)
++  created_at  DateTime @default(now())
++
++  supplier Supplier @relation(fields: [supplier_id], references: [id])
++
++  @@map("supplier_contacts")
++}
++
++model SupplierBrand {
++  supplier_id String
++  brand_id    String
++
++  supplier Supplier @relation(fields: [supplier_id], references: [id])
++  brand    Brand    @relation(fields: [brand_id], references: [id])
++
++  @@id([supplier_id, brand_id])
++  @@map("supplier_brands")
++}
++
++// ─── Módulo 8: Centro de Custo ────────────────────────────────────────────────
++
++enum TipoCusto {
++  FIXO
++  VARIAVEL
++}
++
++model CostCenter {
++  id         String   @id @default(uuid())
++  unidade_id String
++  nome       String   @db.VarChar(120)
++  descricao  String?  @db.Text
++  ativo      Boolean  @default(true)
++  created_at DateTime @default(now())
++  updated_at DateTime @updatedAt
++
++  unit  Unit       @relation(fields: [unidade_id], references: [id])
++  items CostItem[]
++
++  @@map("cost_centers")
++}
++
++model CostItem {
++  id             String    @id @default(uuid())
++  cost_center_id String
++  unidade_id     String
++  nome           String    @db.VarChar(120)
++  tipo           TipoCusto
++  valor_centavos Int?
++  percentual_bps Int?
++  descricao      String?   @db.Text
++  ativo          Boolean   @default(true)
++  created_at     DateTime  @default(now())
++  updated_at     DateTime  @updatedAt
++
++  cost_center CostCenter @relation(fields: [cost_center_id], references: [id])
++  unit        Unit       @relation(fields: [unidade_id], references: [id])
++
++  @@map("cost_items")
++}
+diff --git a/apps/api/src/app.module.ts b/apps/api/src/app.module.ts
+index 4bbff46..81a8d20 100644
+--- a/apps/api/src/app.module.ts
++++ b/apps/api/src/app.module.ts
+@@ -10,6 +10,8 @@ import { CompanySettingsModule } from './modules/company-settings/company-settin
+ import { UnitsModule } from './modules/units/units.module';
+ import { BrandsModule } from './modules/brands/brands.module';
+ import { CategoriesModule } from './modules/categories/categories.module';
++import { SuppliersModule } from './modules/suppliers/suppliers.module';
++import { CostCenterModule } from './modules/cost-center/cost-center.module';
+ import { TenancyModule } from './common/tenancy/tenancy.module';
+ import { JwtSystemGuard } from './common/auth/guards/jwt-system.guard';
+ import { RolesGuard } from './common/auth/guards/roles.guard';
+@@ -27,6 +29,8 @@ import { RolesGuard } from './common/auth/guards/roles.guard';
+     UnitsModule,
+     BrandsModule,
+     CategoriesModule,
++    SuppliersModule,
++    CostCenterModule,
+   ],
+   providers: [
+     { provide: APP_GUARD, useClass: ThrottlerGuard },
+apps/api/src/modules/cost-center/cost-center.controller.ts
+apps/api/src/modules/cost-center/cost-center.module.ts
+apps/api/src/modules/cost-center/cost-center.repository.ts
+apps/api/src/modules/cost-center/cost-center.service.ts
+apps/api/src/modules/cost-center/dto/create-cost-center.dto.ts
+apps/api/src/modules/cost-center/dto/create-cost-item.dto.ts
+apps/api/src/modules/cost-center/dto/list-cost-centers.dto.ts
+apps/api/src/modules/cost-center/dto/update-cost-center.dto.ts
+apps/api/src/modules/cost-center/dto/update-cost-item.dto.ts
+apps/api/src/modules/suppliers/dto/create-supplier-address.dto.ts
+apps/api/src/modules/suppliers/dto/create-supplier-contact.dto.ts
+apps/api/src/modules/suppliers/dto/create-supplier.dto.ts
+apps/api/src/modules/suppliers/dto/link-brands.dto.ts
+apps/api/src/modules/suppliers/dto/list-suppliers.dto.ts
+apps/api/src/modules/suppliers/dto/update-supplier-address.dto.ts
+apps/api/src/modules/suppliers/dto/update-supplier-contact.dto.ts
+apps/api/src/modules/suppliers/dto/update-supplier.dto.ts
+apps/api/src/modules/suppliers/suppliers.controller.ts
+apps/api/src/modules/suppliers/suppliers.module.ts
+apps/api/src/modules/suppliers/suppliers.repository.ts
+apps/api/src/modules/suppliers/suppliers.service.ts
