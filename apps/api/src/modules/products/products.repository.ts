@@ -174,11 +174,7 @@ export class ProductsRepository {
   }
 
   countLoteLinks(id: string): Promise<number> {
-    // GUARD INATIVO — aguardando módulo 4 (Lotes/Estoque).
-    // Quando StockLot for adicionado ao schema, substituir por:
-    //   return this.prisma.stockLot.count({ where: { product_id: id } });
-    // Enquanto isso, deactivate() nunca lança 409 por esta condição.
-    void id;
-    return Promise.resolve(0);
+    // Módulo 4 (Lotes) implementado — conta lotes ativos vinculados ao produto.
+    return this.prisma.lot.count({ where: { product_id: id, active: true } });
   }
 }
