@@ -176,6 +176,8 @@ model Unit {
   vendas                   Venda[]
   coupons                  Coupon[]
   alert_rules              AlertRule[]            @relation("UnitAlertRules")
+  delivery_config          DeliveryConfig?
+  deliveries               Delivery[]
 
   // DB-level: partial unique index on (company_settings_id) WHERE tipo = 'MATRIZ' AND ativa = true
   // Applied via raw migration: CREATE UNIQUE INDEX idx_one_matriz ON units (company_settings_id) WHERE tipo = 'MATRIZ' AND ativa = true;
@@ -1109,4 +1111,73 @@ model CouponUsage {
 
   @@unique([coupon_id, venda_id])
   @@map("coupon_usages")
+}
+
+// ─── Módulo 17: Config Entregas (Uber Direct) ─────────────────────────────────
+
+enum DeliveryProvider {
+  UBER_DIRECT
+  FRETE_GRATIS
+}
+
+enum DeliveryStatus {
+  PENDING
+  SCHEDULED
+  EN_ROUTE_TO_PICKUP
+  ARRIVED_AT_PICKUP
+  EN_ROUTE_TO_DROPOFF
+  ARRIVED_AT_DROPOFF
+  COMPLETED
+  FAILED
+  CANCELED
+}
+
+model DeliveryConfig {
+  id                                String           @id @default(uuid())
+  unidade_id                        String           @unique
+  provider                          DeliveryProvider @default(UBER_DIRECT)
+  active                            Boolean          @default(true)
+  // Credenciais criptografadas com AES-256-GCM: JSON { client_id, client_secret, customer_id, webhook_secret }
+  credentials_encrypted             String           @db.Text
+  // Regra frete grátis: null = desabilitado
+  free_shipping_threshold_centavos  Int?
+  created_at                        DateTime         @default(now())
+  updated_at                        DateTime         @updatedAt
+
+  unit       Unit       @relation(fields: [unidade_id], references: [id])
+  deliveries Delivery[]
+
+  @@map("delivery_configs")
+}
+
+model Delivery {
+  id               String           @id @default(uuid())
+  unidade_id       String
+  venda_id         String           @unique
+  config_id        String
+  provider         DeliveryProvider
+  status           DeliveryStatus   @default(PENDING)
+  // Uber Direct IDs
+  uber_delivery_id String?
+  uber_quote_id    String?
+  tracking_url     String?
+  // Valores — sempre centavos inteiros
+  fee_centavos     Int              @default(0)
+  // Dados de entrega (LGPD: sem CPF, base legal = execução de contrato)
+  recipient_name   String           @db.VarChar(200)
+  recipient_phone  String           @db.VarChar(20)
+  dropoff_address  String           @db.VarChar(500)
+  pickup_address   String           @db.VarChar(500)
+  // Metadados
+  provider_response Json?
+  error_message     String?
+  created_at        DateTime        @default(now())
+  updated_at        DateTime        @updatedAt
+
+  config DeliveryConfig @relation(fields: [config_id], references: [id])
+  unit   Unit           @relation(fields: [unidade_id], references: [id])
+
+  @@index([unidade_id, status])
+  @@index([unidade_id, created_at])
+  @@map("deliveries")
 }
