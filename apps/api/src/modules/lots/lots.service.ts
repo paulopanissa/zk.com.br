@@ -41,7 +41,7 @@ export class LotsService {
       notes: dto.notes ?? null,
       expires_at: dto.expires_at ? new Date(dto.expires_at) : null,
       manufactured_at: dto.manufactured_at ? new Date(dto.manufactured_at) : null,
-      invoice_item_id: dto.invoice_item_id ?? null,
+      ...(dto.invoice_item_id ? { invoice_item: { connect: { id: dto.invoice_item_id } } } : {}),
       unit: { connect: { id: unitId } },
       product: { connect: { id: dto.product_id } },
     };

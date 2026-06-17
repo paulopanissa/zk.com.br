@@ -23,6 +23,7 @@ import { PaymentConfigModule } from './modules/payment-config/payment-config.mod
 import { CustomersModule } from './modules/customers/customers.module';
 import { SearchModule } from './modules/search/search.module';
 import { LgpdModule } from './modules/lgpd/lgpd.module';
+import { NfEntradaModule } from './modules/nf-entrada/nf-entrada.module';
 import { TenancyModule } from './common/tenancy/tenancy.module';
 import { JwtSystemGuard } from './common/auth/guards/jwt-system.guard';
 import { RolesGuard } from './common/auth/guards/roles.guard';
@@ -53,6 +54,7 @@ import { RolesGuard } from './common/auth/guards/roles.guard';
     CustomersModule,
     SearchModule,
     LgpdModule,
+    NfEntradaModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
