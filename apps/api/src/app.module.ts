@@ -20,6 +20,7 @@ import { PricingEngineModule } from './modules/pricing-engine/pricing-engine.mod
 import { StockModule } from './modules/stock/stock.module';
 import { TaxConfigModule } from './modules/tax-config/tax-config.module';
 import { PaymentConfigModule } from './modules/payment-config/payment-config.module';
+import { CustomersModule } from './modules/customers/customers.module';
 import { TenancyModule } from './common/tenancy/tenancy.module';
 import { JwtSystemGuard } from './common/auth/guards/jwt-system.guard';
 import { RolesGuard } from './common/auth/guards/roles.guard';
@@ -47,6 +48,7 @@ import { RolesGuard } from './common/auth/guards/roles.guard';
     StockModule,
     TaxConfigModule,
     PaymentConfigModule,
+    CustomersModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

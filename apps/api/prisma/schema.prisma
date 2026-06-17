@@ -161,14 +161,16 @@ model Unit {
   company_settings CompanySettings @relation(fields: [company_settings_id], references: [id])
   address          UnitAddress?
   config           UnitConfig?
-  brands           Brand[]
-  categories       Category[]
-  suppliers        Supplier[]
-  cost_centers     CostCenter[]
-  cost_items       CostItem[]
-  products         Product[]       @relation("UnitProducts")
-  lots             Lot[]
-  stock_movements  StockMovement[]
+  brands                   Brand[]
+  categories               Category[]
+  suppliers                Supplier[]
+  cost_centers             CostCenter[]
+  cost_items               CostItem[]
+  products                 Product[]              @relation("UnitProducts")
+  lots                     Lot[]
+  stock_movements          StockMovement[]
+  customer_field_defs      CustomerFieldDefinition[]
+  customers                Customer[]
 
   // DB-level: partial unique index on (company_settings_id) WHERE tipo = 'MATRIZ' AND ativa = true
   // Applied via raw migration: CREATE UNIQUE INDEX idx_one_matriz ON units (company_settings_id) WHERE tipo = 'MATRIZ' AND ativa = true;
@@ -715,4 +717,88 @@ model StockMovement {
   @@index([unidade_id, product_id, lot_id])
   @@index([unidade_id, product_id])
   @@map("stock_movements")
+}
+
+// ─── Módulo 12: Clientes ──────────────────────────────────────────────────────
+
+enum CustomerFieldType {
+  TEXT
+  NUMBER
+  DATE
+  SELECT
+  MULTISELECT
+  BOOLEAN
+  PHONE
+  EMAIL
+  CPF_CNPJ
+}
+
+enum CustomerAuditAction {
+  CRIACAO
+  LEITURA
+  ATUALIZACAO
+  EXCLUSAO
+  EXPORTACAO
+}
+
+model CustomerFieldDefinition {
+  id               String            @id @default(uuid())
+  unidade_id       String
+  nome_campo       String            @db.VarChar(60)
+  label            String            @db.VarChar(120)
+  tipo             CustomerFieldType
+  obrigatorio      Boolean           @default(false)
+  validacao_regex  String?           @db.VarChar(500)
+  opcoes           Json?
+  ordem            Int
+  ativo            Boolean           @default(true)
+  created_at       DateTime          @default(now())
+  updated_at       DateTime          @updatedAt
+
+  unit Unit @relation(fields: [unidade_id], references: [id])
+
+  @@unique([unidade_id, nome_campo])
+  @@unique([unidade_id, ordem])
+  @@map("customer_field_definitions")
+}
+
+model Customer {
+  id                    String    @id @default(uuid())
+  unidade_id            String
+  nome                  String    @db.VarChar(255)
+  telefone_principal    String    @db.VarChar(20)
+  email                 String?   @db.VarChar(255)
+  cpf_cnpj_enc          String?   @db.Text
+  cpf_cnpj_hash         String?   @db.VarChar(64)
+  data_nascimento_enc   String?   @db.Text
+  dados_dinamicos       Json?
+  consentimento_lgpd    Boolean   @default(false)
+  consentimento_versao  String?   @db.VarChar(20)
+  consentimento_em      DateTime?
+  ativo                 Boolean   @default(true)
+  created_at            DateTime  @default(now())
+  updated_at            DateTime  @updatedAt
+  deleted_at            DateTime?
+
+  unit       Unit                @relation(fields: [unidade_id], references: [id])
+  audit_logs CustomerAuditLog[]
+
+  @@index([unidade_id])
+  @@index([cpf_cnpj_hash])
+  @@map("customers")
+}
+
+model CustomerAuditLog {
+  id          String              @id @default(uuid())
+  customer_id String
+  acao        CustomerAuditAction
+  usuario_id  String
+  ip_origem   String?             @db.VarChar(45)
+  detalhe     String?             @db.Text
+  created_at  DateTime            @default(now())
+
+  customer Customer @relation(fields: [customer_id], references: [id])
+
+  @@index([customer_id])
+  @@map("customer_audit_logs")
 }
