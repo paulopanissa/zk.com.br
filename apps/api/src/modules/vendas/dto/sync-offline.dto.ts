@@ -74,6 +74,10 @@ export class OfflineSaleDto {
   @IsString()
   @IsOptional()
   observacao?: string;
+
+  @IsString()
+  @IsOptional()
+  coupon_code?: string;
 }
 
 export class SyncOfflineDto {
