@@ -179,6 +179,7 @@ model Unit {
   delivery_config          DeliveryConfig?
   deliveries               Delivery[]
   ai_api_keys              AiApiKey[]
+  ai_content_generations   AiContentGeneration[]
 
   // DB-level: partial unique index on (company_settings_id) WHERE tipo = 'MATRIZ' AND ativa = true
   // Applied via raw migration: CREATE UNIQUE INDEX idx_one_matriz ON units (company_settings_id) WHERE tipo = 'MATRIZ' AND ativa = true;
@@ -417,7 +418,8 @@ model Product {
   nf_entrada_items NfEntradaItem[]
   venda_items      VendaItem[]      @relation("ProductVendaItems")
   coupons          Coupon[]         @relation("ProductCoupons")
-  alert_rules      AlertRule[]      @relation("ProductAlertRules")
+  alert_rules            AlertRule[]           @relation("ProductAlertRules")
+  ai_content_generations AiContentGeneration[]
 
   @@unique([unidade_id, slug])
   @@unique([unidade_id, sku])
@@ -1212,4 +1214,42 @@ model AiApiKey {
   @@unique([unidade_id, provider, label])
   @@index([unidade_id, provider])
   @@map("ai_api_keys")
+}
+
+// ─── Módulo 27: Integração de IA ─────────────────────────────────────────────
+
+enum AiContentType {
+  DESCRIPTION
+  SHORT_DESCRIPTION
+  SEO
+  SCHEMA_ORG
+}
+
+enum AiGenerationStatus {
+  PENDING
+  PROCESSING
+  DONE
+  FAILED
+}
+
+model AiContentGeneration {
+  id            String             @id @default(uuid())
+  unidade_id    String
+  product_id    String
+  provider      AiProvider
+  types         AiContentType[]
+  status        AiGenerationStatus @default(PENDING)
+  generated     Json?
+  applied_at    DateTime?
+  error_message String?            @db.Text
+  job_id        String?            @db.VarChar(200)
+  created_at    DateTime           @default(now())
+  updated_at    DateTime           @updatedAt
+
+  unit    Unit    @relation(fields: [unidade_id], references: [id])
+  product Product @relation(fields: [product_id], references: [id])
+
+  @@index([unidade_id, product_id])
+  @@index([unidade_id, status])
+  @@map("ai_content_generations")
 }
