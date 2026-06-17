@@ -171,6 +171,7 @@ model Unit {
   stock_movements          StockMovement[]
   customer_field_defs      CustomerFieldDefinition[]
   customers                Customer[]
+  lgpd_requests            LgpdDataRequest[]          @relation("UnitLgpdRequests")
 
   // DB-level: partial unique index on (company_settings_id) WHERE tipo = 'MATRIZ' AND ativa = true
   // Applied via raw migration: CREATE UNIQUE INDEX idx_one_matriz ON units (company_settings_id) WHERE tipo = 'MATRIZ' AND ativa = true;
@@ -719,6 +720,22 @@ model StockMovement {
   @@map("stock_movements")
 }
 
+// ─── Módulo 22: LGPD ─────────────────────────────────────────────────────────
+
+enum LgpdRequestType {
+  EXPORTACAO
+  EXCLUSAO
+  RETIFICACAO
+  REVOGACAO_CONSENTIMENTO
+}
+
+enum LgpdRequestStatus {
+  PENDENTE
+  EM_PROCESSAMENTO
+  CONCLUIDA
+  REJEITADA
+}
+
 // ─── Módulo 12: Clientes ──────────────────────────────────────────────────────
 
 enum CustomerFieldType {
@@ -780,8 +797,9 @@ model Customer {
   updated_at            DateTime  @updatedAt
   deleted_at            DateTime?
 
-  unit       Unit                @relation(fields: [unidade_id], references: [id])
-  audit_logs CustomerAuditLog[]
+  unit          Unit                @relation(fields: [unidade_id], references: [id])
+  audit_logs    CustomerAuditLog[]
+  lgpd_requests LgpdDataRequest[]   @relation("CustomerLgpdRequests")
 
   @@index([unidade_id])
   @@index([cpf_cnpj_hash])
@@ -801,4 +819,28 @@ model CustomerAuditLog {
 
   @@index([customer_id])
   @@map("customer_audit_logs")
+}
+
+model LgpdDataRequest {
+  id               String            @id @default(uuid())
+  unidade_id       String
+  customer_id      String
+  tipo             LgpdRequestType
+  status           LgpdRequestStatus @default(PENDENTE)
+  descricao        String?           @db.Text
+  solicitado_em    DateTime          @default(now())
+  prazo_legal      DateTime
+  processado_em    DateTime?
+  processado_por   String?
+  justificativa    String?           @db.Text
+  dados_exportados Json?
+  created_at       DateTime          @default(now())
+  updated_at       DateTime          @updatedAt
+
+  unit     Unit     @relation("UnitLgpdRequests", fields: [unidade_id], references: [id])
+  customer Customer @relation("CustomerLgpdRequests", fields: [customer_id], references: [id])
+
+  @@index([unidade_id, status])
+  @@index([customer_id])
+  @@map("lgpd_data_requests")
 }
