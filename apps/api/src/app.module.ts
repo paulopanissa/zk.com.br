@@ -22,6 +22,7 @@ import { TaxConfigModule } from './modules/tax-config/tax-config.module';
 import { PaymentConfigModule } from './modules/payment-config/payment-config.module';
 import { CustomersModule } from './modules/customers/customers.module';
 import { SearchModule } from './modules/search/search.module';
+import { LgpdModule } from './modules/lgpd/lgpd.module';
 import { TenancyModule } from './common/tenancy/tenancy.module';
 import { JwtSystemGuard } from './common/auth/guards/jwt-system.guard';
 import { RolesGuard } from './common/auth/guards/roles.guard';
@@ -51,6 +52,7 @@ import { RolesGuard } from './common/auth/guards/roles.guard';
     PaymentConfigModule,
     CustomersModule,
     SearchModule,
+    LgpdModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
