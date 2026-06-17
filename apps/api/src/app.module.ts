@@ -29,6 +29,7 @@ import { VendasModule } from './modules/vendas/vendas.module';
 import { AlertasModule } from './modules/alertas/alertas.module';
 import { EntregasModule } from './modules/entregas/entregas.module';
 import { RelatoriosModule } from './modules/relatorios/relatorios.module';
+import { AiKeysModule } from './modules/ai-keys/ai-keys.module';
 import { TenancyModule } from './common/tenancy/tenancy.module';
 import { JwtSystemGuard } from './common/auth/guards/jwt-system.guard';
 import { RolesGuard } from './common/auth/guards/roles.guard';
@@ -65,6 +66,7 @@ import { RolesGuard } from './common/auth/guards/roles.guard';
     AlertasModule,
     EntregasModule,
     RelatoriosModule,
+    AiKeysModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

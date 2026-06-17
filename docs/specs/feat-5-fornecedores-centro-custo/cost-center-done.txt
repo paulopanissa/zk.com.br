@@ -1,0 +1,3 @@
+Modulo cost-center criado em apps/api/src/modules/cost-center/ com controller, service, repository e 5 DTOs.
+Schema Prisma atualizado com TipoCusto, CostCenter e CostItem; relacoes adicionadas em Unit; prisma generate executado com sucesso.
+TypeScript compilou sem erros (tsc --noEmit); ESLint nao instalado no projeto (ausente do devDependencies).

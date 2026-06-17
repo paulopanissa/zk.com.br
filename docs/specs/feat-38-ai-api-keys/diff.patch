@@ -1,0 +1,2099 @@
+diff --git a/apps/api/prisma/migrations/20260617210000_ai_api_keys/migration.sql b/apps/api/prisma/migrations/20260617210000_ai_api_keys/migration.sql
+new file mode 100644
+index 0000000..66a5516
+--- /dev/null
++++ b/apps/api/prisma/migrations/20260617210000_ai_api_keys/migration.sql
+@@ -0,0 +1,28 @@
++-- CreateEnum
++CREATE TYPE "AiProvider" AS ENUM ('OPENAI', 'DEEPSEEK', 'GOOGLE_GEMINI', 'ANTHROPIC');
++
++-- CreateTable
++CREATE TABLE "ai_api_keys" (
++    "id" TEXT NOT NULL,
++    "unidade_id" TEXT NOT NULL,
++    "provider" "AiProvider" NOT NULL,
++    "label" VARCHAR(100) NOT NULL,
++    "key_encrypted" TEXT NOT NULL,
++    "active" BOOLEAN NOT NULL DEFAULT true,
++    "last_tested_at" TIMESTAMP(3),
++    "last_test_ok" BOOLEAN,
++    "last_test_latency_ms" INTEGER,
++    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
++    "updated_at" TIMESTAMP(3) NOT NULL,
++
++    CONSTRAINT "ai_api_keys_pkey" PRIMARY KEY ("id")
++);
++
++-- CreateIndex
++CREATE UNIQUE INDEX "ai_api_keys_unidade_id_provider_label_key" ON "ai_api_keys"("unidade_id", "provider", "label");
++
++-- CreateIndex
++CREATE INDEX "ai_api_keys_unidade_id_provider_idx" ON "ai_api_keys"("unidade_id", "provider");
++
++-- AddForeignKey
++ALTER TABLE "ai_api_keys" ADD CONSTRAINT "ai_api_keys_unidade_id_fkey" FOREIGN KEY ("unidade_id") REFERENCES "units"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+diff --git a/apps/api/prisma/schema.prisma b/apps/api/prisma/schema.prisma
+index 45ae4c5..91bb995 100644
+--- a/apps/api/prisma/schema.prisma
++++ b/apps/api/prisma/schema.prisma
+@@ -178,6 +178,7 @@ model Unit {
+   alert_rules              AlertRule[]            @relation("UnitAlertRules")
+   delivery_config          DeliveryConfig?
+   deliveries               Delivery[]
++  ai_api_keys              AiApiKey[]
+ 
+   // DB-level: partial unique index on (company_settings_id) WHERE tipo = 'MATRIZ' AND ativa = true
+   // Applied via raw migration: CREATE UNIQUE INDEX idx_one_matriz ON units (company_settings_id) WHERE tipo = 'MATRIZ' AND ativa = true;
+@@ -1181,3 +1182,32 @@ model Delivery {
+   @@index([unidade_id, created_at])
+   @@map("deliveries")
+ }
++
++// ─── Módulo 19: API Keys de IA ────────────────────────────────────────────────
++
++enum AiProvider {
++  OPENAI
++  DEEPSEEK
++  GOOGLE_GEMINI
++  ANTHROPIC
++}
++
++model AiApiKey {
++  id                   String      @id @default(uuid())
++  unidade_id           String
++  provider             AiProvider
++  label                String      @db.VarChar(100)
++  key_encrypted        String      @db.Text
++  active               Boolean     @default(true)
++  last_tested_at       DateTime?
++  last_test_ok         Boolean?
++  last_test_latency_ms Int?
++  created_at           DateTime    @default(now())
++  updated_at           DateTime    @updatedAt
++
++  unit Unit @relation(fields: [unidade_id], references: [id])
++
++  @@unique([unidade_id, provider, label])
++  @@index([unidade_id, provider])
++  @@map("ai_api_keys")
++}
+diff --git a/apps/api/src/app.module.ts b/apps/api/src/app.module.ts
+index c8ba2c5..1d225d8 100644
+--- a/apps/api/src/app.module.ts
++++ b/apps/api/src/app.module.ts
+@@ -29,6 +29,7 @@ import { VendasModule } from './modules/vendas/vendas.module';
+ import { AlertasModule } from './modules/alertas/alertas.module';
+ import { EntregasModule } from './modules/entregas/entregas.module';
+ import { RelatoriosModule } from './modules/relatorios/relatorios.module';
++import { AiKeysModule } from './modules/ai-keys/ai-keys.module';
+ import { TenancyModule } from './common/tenancy/tenancy.module';
+ import { JwtSystemGuard } from './common/auth/guards/jwt-system.guard';
+ import { RolesGuard } from './common/auth/guards/roles.guard';
+@@ -65,6 +66,7 @@ import { RolesGuard } from './common/auth/guards/roles.guard';
+     AlertasModule,
+     EntregasModule,
+     RelatoriosModule,
++    AiKeysModule,
+   ],
+   providers: [
+     { provide: APP_GUARD, useClass: ThrottlerGuard },
+diff --git a/apps/api/src/modules/ai-keys/ai-keys.controller.ts b/apps/api/src/modules/ai-keys/ai-keys.controller.ts
+new file mode 100644
+index 0000000..6862dab
+--- /dev/null
++++ b/apps/api/src/modules/ai-keys/ai-keys.controller.ts
+@@ -0,0 +1,72 @@
++import {
++  Body,
++  Controller,
++  Delete,
++  Get,
++  HttpCode,
++  HttpStatus,
++  Param,
++  ParseUUIDPipe,
++  Patch,
++  Post,
++  Query,
++} from '@nestjs/common';
++import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
++import { AiProvider, SystemRole } from '@prisma/client';
++import { CurrentUser } from '../../common/auth/decorators/current-user.decorator';
++import { Roles } from '../../common/auth/decorators/roles.decorator';
++import { JwtSystemPayload } from '../../common/auth/types/jwt-payload.type';
++import { AiKeysService } from './ai-keys.service';
++import { CreateAiKeyDto } from './dto/create-ai-key.dto';
++import { UpdateAiKeyDto } from './dto/update-ai-key.dto';
++
++@ApiTags('AI Keys')
++@ApiBearerAuth()
++@Controller('ai-keys')
++@Roles(SystemRole.ADMINISTRADOR)
++export class AiKeysController {
++  constructor(private readonly service: AiKeysService) {}
++
++  @Post()
++  @ApiOperation({ summary: 'Cadastrar API key de provedor de IA' })
++  create(@Body() dto: CreateAiKeyDto, @CurrentUser() user: JwtSystemPayload) {
++    return this.service.create(dto, user);
++  }
++
++  @Get()
++  @ApiOperation({ summary: 'Listar API keys da unidade (valor mascarado)' })
++  @ApiQuery({ name: 'provider', enum: AiProvider, required: false })
++  findAll(@Query('provider') provider: AiProvider | undefined, @CurrentUser() user: JwtSystemPayload) {
++    return this.service.findAll(user, provider);
++  }
++
++  @Get(':id')
++  @ApiOperation({ summary: 'Buscar API key por ID (valor mascarado)' })
++  findOne(@Param('id', new ParseUUIDPipe()) id: string, @CurrentUser() user: JwtSystemPayload) {
++    return this.service.findOne(id, user);
++  }
++
++  @Patch(':id')
++  @ApiOperation({ summary: 'Atualizar label, valor ou status da key' })
++  update(
++    @Param('id', new ParseUUIDPipe()) id: string,
++    @Body() dto: UpdateAiKeyDto,
++    @CurrentUser() user: JwtSystemPayload,
++  ) {
++    return this.service.update(id, dto, user);
++  }
++
++  @Delete(':id')
++  @HttpCode(HttpStatus.OK)
++  @ApiOperation({ summary: 'Remover API key' })
++  remove(@Param('id', new ParseUUIDPipe()) id: string, @CurrentUser() user: JwtSystemPayload) {
++    return this.service.remove(id, user);
++  }
++
++  @Post(':id/test')
++  @HttpCode(HttpStatus.OK)
++  @ApiOperation({ summary: 'Testar conectividade da key com o provedor' })
++  testKey(@Param('id', new ParseUUIDPipe()) id: string, @CurrentUser() user: JwtSystemPayload) {
++    return this.service.testKey(id, user);
++  }
++}
+diff --git a/apps/api/src/modules/ai-keys/ai-keys.module.ts b/apps/api/src/modules/ai-keys/ai-keys.module.ts
+new file mode 100644
+index 0000000..0060c41
+--- /dev/null
++++ b/apps/api/src/modules/ai-keys/ai-keys.module.ts
+@@ -0,0 +1,13 @@
++import { Module } from '@nestjs/common';
++import { TenancyModule } from '../../common/tenancy/tenancy.module';
++import { AiKeysController } from './ai-keys.controller';
++import { AiKeysRepository } from './ai-keys.repository';
++import { AiKeysService } from './ai-keys.service';
++
++@Module({
++  imports: [TenancyModule],
++  controllers: [AiKeysController],
++  providers: [AiKeysService, AiKeysRepository],
++  exports: [AiKeysService],
++})
++export class AiKeysModule {}
+diff --git a/apps/api/src/modules/ai-keys/ai-keys.repository.ts b/apps/api/src/modules/ai-keys/ai-keys.repository.ts
+new file mode 100644
+index 0000000..6d9cca5
+--- /dev/null
++++ b/apps/api/src/modules/ai-keys/ai-keys.repository.ts
+@@ -0,0 +1,38 @@
++import { Injectable } from '@nestjs/common';
++import { AiApiKey, AiProvider, Prisma } from '@prisma/client';
++import { PrismaService } from '../../prisma/prisma.service';
++
++@Injectable()
++export class AiKeysRepository {
++  constructor(private readonly prisma: PrismaService) {}
++
++  create(data: Prisma.AiApiKeyCreateInput): Promise<AiApiKey> {
++    return this.prisma.aiApiKey.create({ data });
++  }
++
++  findAll(unitId: string, provider?: AiProvider): Promise<AiApiKey[]> {
++    return this.prisma.aiApiKey.findMany({
++      where: { unidade_id: unitId, ...(provider ? { provider } : {}) },
++      orderBy: [{ provider: 'asc' }, { label: 'asc' }],
++    });
++  }
++
++  findById(id: string, unitId: string): Promise<AiApiKey | null> {
++    return this.prisma.aiApiKey.findFirst({ where: { id, unidade_id: unitId } });
++  }
++
++  findActiveByProvider(unitId: string, provider: AiProvider): Promise<AiApiKey | null> {
++    return this.prisma.aiApiKey.findFirst({
++      where: { unidade_id: unitId, provider, active: true },
++      orderBy: { created_at: 'asc' },
++    });
++  }
++
++  update(id: string, unitId: string, data: Prisma.AiApiKeyUpdateInput): Promise<AiApiKey> {
++    return this.prisma.aiApiKey.update({ where: { id, unidade_id: unitId }, data });
++  }
++
++  delete(id: string, unitId: string): Promise<AiApiKey> {
++    return this.prisma.aiApiKey.delete({ where: { id, unidade_id: unitId } });
++  }
++}
+diff --git a/apps/api/src/modules/ai-keys/ai-keys.service.ts b/apps/api/src/modules/ai-keys/ai-keys.service.ts
+new file mode 100644
+index 0000000..40d42a3
+--- /dev/null
++++ b/apps/api/src/modules/ai-keys/ai-keys.service.ts
+@@ -0,0 +1,160 @@
++import {
++  ConflictException,
++  Injectable,
++  NotFoundException,
++} from '@nestjs/common';
++import { AiApiKey, AiProvider } from '@prisma/client';
++import { JwtSystemPayload } from '../../common/auth/types/jwt-payload.type';
++import { CryptoService } from '../../common/crypto/crypto.service';
++import { TenancyService } from '../../common/tenancy/tenancy.service';
++import { AiKeysRepository } from './ai-keys.repository';
++import { CreateAiKeyDto } from './dto/create-ai-key.dto';
++import { UpdateAiKeyDto } from './dto/update-ai-key.dto';
++
++// Mask: show first 6 chars + last 4, rest as asterisks
++function maskKey(raw: string): string {
++  if (raw.length <= 12) return '****';
++  return `${raw.slice(0, 6)}****${raw.slice(-4)}`;
++}
++
++function stripKey(key: AiApiKey): Omit<AiApiKey, 'key_encrypted'> & { key_masked: string } {
++  const { key_encrypted, ...rest } = key;
++  return { ...rest, key_masked: maskKey(key_encrypted) };
++}
++
++export type SafeAiKey = ReturnType<typeof stripKey>;
++
++// Minimal connectivity test payloads per provider
++const TEST_ENDPOINTS: Record<AiProvider, { url: string; buildBody: () => object; authHeader: (k: string) => Record<string, string> }> = {
++  [AiProvider.OPENAI]: {
++    url: 'https://api.openai.com/v1/chat/completions',
++    buildBody: () => ({ model: 'gpt-4o-mini', messages: [{ role: 'user', content: 'ping' }], max_tokens: 1 }),
++    authHeader: (k) => ({ Authorization: `Bearer ${k}` }),
++  },
++  [AiProvider.DEEPSEEK]: {
++    url: 'https://api.deepseek.com/chat/completions',
++    buildBody: () => ({ model: 'deepseek-chat', messages: [{ role: 'user', content: 'ping' }], max_tokens: 1 }),
++    authHeader: (k) => ({ Authorization: `Bearer ${k}` }),
++  },
++  [AiProvider.GOOGLE_GEMINI]: {
++    url: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent',
++    buildBody: () => ({ contents: [{ parts: [{ text: 'ping' }] }] }),
++    authHeader: (k) => ({ 'x-goog-api-key': k }),
++  },
++  [AiProvider.ANTHROPIC]: {
++    url: 'https://api.anthropic.com/v1/messages',
++    buildBody: () => ({ model: 'claude-haiku-4-5-20251001', max_tokens: 1, messages: [{ role: 'user', content: 'ping' }] }),
++    authHeader: (k) => ({ 'x-api-key': k, 'anthropic-version': '2023-06-01' }),
++  },
++};
++
++@Injectable()
++export class AiKeysService {
++  constructor(
++    private readonly repository: AiKeysRepository,
++    private readonly tenancy: TenancyService,
++    private readonly crypto: CryptoService,
++  ) {}
++
++  async create(dto: CreateAiKeyDto, user: JwtSystemPayload): Promise<SafeAiKey> {
++    const unitId = await this.tenancy.resolveUnitId(user);
++
++    const existing = await this.repository.findAll(unitId, dto.provider).then((keys) =>
++      keys.find((k) => k.label === dto.label),
++    );
++    if (existing) {
++      throw new ConflictException(`Já existe uma key com label "${dto.label}" para ${dto.provider} nesta unidade`);
++    }
++
++    const keyEncrypted = this.crypto.encrypt(dto.key);
++    const created = await this.repository.create({
++      provider: dto.provider,
++      label: dto.label,
++      key_encrypted: keyEncrypted,
++      active: dto.active ?? true,
++      unit: { connect: { id: unitId } },
++    });
++
++    return stripKey(created);
++  }
++
++  async findAll(user: JwtSystemPayload, provider?: AiProvider): Promise<SafeAiKey[]> {
++    const unitId = await this.tenancy.resolveUnitId(user);
++    const keys = await this.repository.findAll(unitId, provider);
++    return keys.map(stripKey);
++  }
++
++  async findOne(id: string, user: JwtSystemPayload): Promise<SafeAiKey> {
++    const unitId = await this.tenancy.resolveUnitId(user);
++    const key = await this.repository.findById(id, unitId);
++    if (!key) throw new NotFoundException('API key não encontrada');
++    return stripKey(key);
++  }
++
++  async update(id: string, dto: UpdateAiKeyDto, user: JwtSystemPayload): Promise<SafeAiKey> {
++    const unitId = await this.tenancy.resolveUnitId(user);
++    const existing = await this.repository.findById(id, unitId);
++    if (!existing) throw new NotFoundException('API key não encontrada');
++
++    const updateData: Parameters<typeof this.repository.update>[2] = {};
++    if (dto.label !== undefined) updateData.label = dto.label;
++    if (dto.active !== undefined) updateData.active = dto.active;
++    if (dto.key !== undefined) updateData.key_encrypted = this.crypto.encrypt(dto.key);
++
++    const updated = await this.repository.update(id, unitId, updateData);
++    return stripKey(updated);
++  }
++
++  async remove(id: string, user: JwtSystemPayload): Promise<{ deleted: boolean }> {
++    const unitId = await this.tenancy.resolveUnitId(user);
++    const existing = await this.repository.findById(id, unitId);
++    if (!existing) throw new NotFoundException('API key não encontrada');
++    await this.repository.delete(id, unitId);
++    return { deleted: true };
++  }
++
++  async testKey(id: string, user: JwtSystemPayload): Promise<{ ok: boolean; latency_ms: number; error?: string }> {
++    const unitId = await this.tenancy.resolveUnitId(user);
++    const record = await this.repository.findById(id, unitId);
++    if (!record) throw new NotFoundException('API key não encontrada');
++
++    const rawKey = this.crypto.decrypt(record.key_encrypted);
++    const endpoint = TEST_ENDPOINTS[record.provider];
++    const start = Date.now();
++    let ok = false;
++    let error: string | undefined;
++
++    try {
++      const res = await fetch(endpoint.url, {
++        method: 'POST',
++        headers: { 'Content-Type': 'application/json', ...endpoint.authHeader(rawKey) },
++        body: JSON.stringify(endpoint.buildBody()),
++        signal: AbortSignal.timeout(10_000),
++      });
++      ok = res.status < 500;
++      if (!ok) {
++        const body = await res.text().catch(() => '');
++        error = `HTTP ${res.status}: ${body.slice(0, 200)}`;
++      }
++    } catch (e) {
++      error = e instanceof Error ? e.message : String(e);
++    }
++
++    const latency_ms = Date.now() - start;
++
++    await this.repository.update(id, unitId, {
++      last_tested_at: new Date(),
++      last_test_ok: ok,
++      last_test_latency_ms: latency_ms,
++    });
++
++    return { ok, latency_ms, ...(error ? { error } : {}) };
++  }
++
++  // Used internally by AI integration module (spec 27)
++  async resolveActiveKey(unitId: string, provider: AiProvider): Promise<string> {
++    const record = await this.repository.findActiveByProvider(unitId, provider);
++    if (!record) throw new NotFoundException(`Nenhuma API key ativa para ${provider} nesta unidade`);
++    return this.crypto.decrypt(record.key_encrypted);
++  }
++}
+diff --git a/apps/api/src/modules/ai-keys/dto/create-ai-key.dto.ts b/apps/api/src/modules/ai-keys/dto/create-ai-key.dto.ts
+new file mode 100644
+index 0000000..e5556ac
+--- /dev/null
++++ b/apps/api/src/modules/ai-keys/dto/create-ai-key.dto.ts
+@@ -0,0 +1,25 @@
++import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
++import { AiProvider } from '@prisma/client';
++import { IsBoolean, IsEnum, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
++
++export class CreateAiKeyDto {
++  @ApiProperty({ enum: AiProvider })
++  @IsEnum(AiProvider)
++  provider!: AiProvider;
++
++  @ApiProperty({ example: 'principal' })
++  @IsString()
++  @IsNotEmpty()
++  @MaxLength(100)
++  label!: string;
++
++  @ApiProperty({ example: 'sk-...' })
++  @IsString()
++  @IsNotEmpty()
++  key!: string;
++
++  @ApiPropertyOptional({ default: true })
++  @IsBoolean()
++  @IsOptional()
++  active?: boolean;
++}
+diff --git a/apps/api/src/modules/ai-keys/dto/update-ai-key.dto.ts b/apps/api/src/modules/ai-keys/dto/update-ai-key.dto.ts
+new file mode 100644
+index 0000000..7e68439
+--- /dev/null
++++ b/apps/api/src/modules/ai-keys/dto/update-ai-key.dto.ts
+@@ -0,0 +1,22 @@
++import { ApiPropertyOptional } from '@nestjs/swagger';
++import { IsBoolean, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
++
++export class UpdateAiKeyDto {
++  @ApiPropertyOptional({ example: 'backup' })
++  @IsString()
++  @IsNotEmpty()
++  @MaxLength(100)
++  @IsOptional()
++  label?: string;
++
++  @ApiPropertyOptional()
++  @IsString()
++  @IsNotEmpty()
++  @IsOptional()
++  key?: string;
++
++  @ApiPropertyOptional()
++  @IsBoolean()
++  @IsOptional()
++  active?: boolean;
++}
+diff --git a/docs/specs/feat-11-storage/build-summary.md b/docs/specs/feat-11-storage/build-summary.md
+new file mode 100644
+index 0000000..ee34f97
+--- /dev/null
++++ b/docs/specs/feat-11-storage/build-summary.md
+@@ -0,0 +1,7 @@
++## Build Summary — feat/11-storage (StorageModule)
++
++Módulo transversal de storage implementado em `apps/api/src/common/storage/` com suporte a três drivers: S3, Cloudflare R2 e LocalDriver (dev/test).
++Seleção do driver via `STORAGE_PROVIDER` env; `StorageModule` é `@Global()` e exporta `StorageService` para injeção direta.
++MIME detectado via magic bytes (`file-type@16`), keys geradas pelo servidor (UUID), e arquivos fiscais (`fiscal/xml`, `fiscal/pdf`) protegidos contra deleção.
++Controller `GET /storage/signed-url` requer `ADMINISTRADOR`; TTL de arquivos fiscais limitado a 600s no controller.
++`tsc --noEmit` passou sem erros; ESLint não configurado no projeto (sem `.eslintrc` ou `eslint.config.js`).
+diff --git a/docs/specs/feat-15-tax-config-payment-config/plan.md b/docs/specs/feat-15-tax-config-payment-config/plan.md
+new file mode 100644
+index 0000000..eb905e5
+--- /dev/null
++++ b/docs/specs/feat-15-tax-config-payment-config/plan.md
+@@ -0,0 +1,35 @@
++# feat/15 — Config Impostos (spec 18) + Config Pagamentos (spec 16)
++
++## FASE 1 — Schema + Infra [Completada ✅]
++- [x] Enums: TipoImposto, BaseCalculo, TipoImpostoNcm, PaymentProviderSlug, PaymentEnvironment, PaymentChannel, PaymentMethod
++- [x] Models: TaxProfile, TaxRate, NcmTaxOverride, PaymentProvider, PaymentProviderCredential, PaymentChannelConfig, PaymentMethodMapping, PaymentWebhookEvent
++- [x] Prisma client gerado
++- [x] Migration: tax_and_payment_config (running)
++- [x] CryptoService + CryptoModule criados em common/crypto/
++
++## FASE 2 — tax-config module [Em Progresso ⏰]
++- [ ] tax-config.module.ts
++- [ ] tax-config.controller.ts (14 endpoints)
++- [ ] tax-config.service.ts (padrao constraint, effective-rates logic)
++- [ ] tax-config.repository.ts
++- [ ] DTOs (create/update/query)
++
++## FASE 3 — payment-config module [Não Iniciada ⏳]
++- [ ] payment-config.module.ts
++- [ ] payment-config.controller.ts (12 endpoints + webhook)
++- [ ] payment-config.service.ts (credential encryption, activate validation, webhook idempotency)
++- [ ] payment-config.repository.ts
++- [ ] DTOs
++
++## FASE 4 — Integração + Compilação [Não Iniciada ⏳]
++- [ ] app.module.ts: adicionar CryptoModule, TaxConfigModule, PaymentConfigModule
++- [ ] .env.example: adicionar PII_ENCRYPTION_KEY, PII_HASH_KEY
++- [ ] TypeScript compile check
++- [ ] Commit + PR (Closes #15, Closes #16)
++
++## Decisões tomadas
++- CryptoModule é @Global para que Clientes (módulo 12) também use sem re-importar
++- AES-256-GCM com IV random por criptografia; formato `{iv}:{tag}:{ciphertext}` todos em hex
++- webhook_secret e credentials criptografados antes de INSERT, nunca retornados
++- PaymentWebhookEvent armazena eventos para idempotência (unique [provider, event_id])
++- tax-config sem tenancy (configuração global da empresa)
+diff --git a/docs/specs/feat-15-tax-config-payment-config/pre-pr-report.md b/docs/specs/feat-15-tax-config-payment-config/pre-pr-report.md
+new file mode 100644
+index 0000000..3098406
+--- /dev/null
++++ b/docs/specs/feat-15-tax-config-payment-config/pre-pr-report.md
+@@ -0,0 +1,87 @@
++# Pre-PR Review — feat/15 (Config Impostos + Config Pagamentos)
++
++**Data:** 2026-06-17
++**Branch:** feat/15-tax-config-payment-config
++**Revisor:** revisor-erp (agente)
++**Status geral:** AMARELO (nenhum crítico bloqueador, mas 2 avisos de segurança precisam ser corrigidos antes do merge)
++
++---
++
++## Crítico (precisa corrigir)
++
++### C1 — Endpoint de webhook protegido por `@Roles(ADMINISTRADOR)` — gateway nunca chegará
++**Arquivo:** `apps/api/src/modules/payment-config/payment-config.controller.ts`, linha 123–145
++
++O endpoint `POST /payment-config/providers/:slug/webhook` está decorado com `@Roles(SystemRole.ADMINISTRADOR)`.
++O `RolesGuard` global só passa quando o token JWT carrega o role `ADMINISTRADOR`. Nenhum gateway externo (Mercado Pago, Asaas, Stripe, etc.) enviará esse token — a chamada retornará 403 antes de qualquer verificação de assinatura.
++
++Webhooks de gateway precisam ser públicos (sem autenticação de sistema) mas com autenticação por assinatura HMAC.
++Corrija removendo `@Roles` deste endpoint e adicionando `@Public()` (que bypassa o `JwtSystemGuard`) mantendo a verificação de assinatura já implementada no service.
++
++---
++
++## Aviso (deveria corrigir)
++
++### A1 — `webhook_secret` sem fluxo de gravação criptografada
++**Arquivo:** `apps/api/src/modules/payment-config/payment-config.repository.ts` e `payment-config.service.ts`
++
++O campo `PaymentProvider.webhook_secret` (coluna `TEXT` no banco) é descriptografado corretamente na verificação do webhook (`verifyWebhookSignature` descriptografa via `CryptoService.decrypt`). Porém não existe endpoint nem método de serviço para *gravar* o `webhook_secret` — o campo ficará `NULL` para todos os provedores, tornando a verificação de assinatura permanentemente inválida (`verifyWebhookSignature` retorna `false` quando `!provider.webhook_secret`).
++
++Adicione um endpoint administrativo `PUT /payment-config/providers/:slug/webhook-secret` (ou inclua o campo no DTO de ativação) que receba o segredo em plaintext, o criptografe via `CryptoService.encrypt` e persista.
++
++### A2 — Transform de alíquota aceita float em input; heurística da fronteira 100 é ambígua
++**Arquivos:** `apps/api/src/modules/tax-config/dto/create-tax-rate.dto.ts` linha 20–24; `create-ncm-override.dto.ts` linha 25–28
++
++```ts
++@Transform(({ value }) => {
++  const n = typeof value === 'string' ? parseFloat(value) : Number(value);
++  return n < 100 ? Math.round(n * 100) : Math.round(n);
++})
++```
++
++A lógica `n < 100 → n * 100` produz resultado errado para alíquota de exatamente 99% ou qualquer valor entre 99,01% e 99,99% enviado como inteiro (ex.: enviar `99` querendo dizer 99 centésimos de porcento produz `9900`, mas enviar `99` querendo dizer 99% também produz `9900` — ambíguo pelo lado de quem chama). Além disso, aceita `12.5` como float no wire, o que contraria o invariante "nunca float para dinheiro/alíquota".
++
++Recomendação: remova o `@Transform` de conversão automática. Documente que a API aceita **somente inteiros em centésimos de porcento** e rejeite qualquer valor com casas decimais no JSON (`@IsInt` já faz isso se o Transform não converter antes). Se compatibilidade com clientes legados exigir a conversão, registre-a como trade-off em ADR.
++
++---
++
++## Sugestão (bom ter)
++
++### S1 — `padrao` constraint resolvida via aplicação, não via índice único de banco
++**Arquivo:** `apps/api/prisma/schema.prisma` / `apps/api/src/modules/tax-config/tax-config.service.ts`
++
++A unicidade de "apenas um perfil padrão por `regime_tributario`" é garantida pelo service (`assertNoPaddingConflict`) mas não há índice/constraint no banco. Uma janela de concorrência (dois requests simultâneos criando perfis padrão) pode violar o invariante.
++
++Adicione um **partial unique index** na migration:
++```sql
++CREATE UNIQUE INDEX tax_profiles_padrao_regime_uidx
++  ON tax_profiles (regime_tributario)
++  WHERE padrao = true;
++```
++O service pode continuar com a verificação antecipada para devolver um 409 legível, mas o banco é a última linha de defesa.
++
++### S2 — `findCredentialsByProvider` inclui `valor` (criptografado) no select, mas o campo não é usado
++**Arquivo:** `apps/api/src/modules/payment-config/payment-config.repository.ts`, linha 80
++
++```ts
++select: { id: true, chave: true, ambiente: true, provider_id: true, valor: true }
++```
++
++O método não é chamado por nenhum path do service atual. Quando for usado, incluir `valor` no retorno aumenta o risco de alguém, por engano, expor o ciphertext na resposta. Remova `valor: true` do select ou o método inteiro, pois `findProviderBySlug` já inclui `credentials` via `include` e é o que o service consome.
++
++### S3 — Seeding inicial de provedores não está documentado
++O schema cria os modelos mas não há seed para popular `payment_providers` com os slugs canônicos (MERCADO_PAGO, ASAAS, etc.). A validação de `MAQUININHA_POINT` depende do registro existir no banco com o `slug` correto. Adicione um seed ou note no README da migration como inicializar os registros.
++
++---
++
++## O que está correto (resumo positivo)
++
++- **Alíquotas em inteiro:** `aliquota_percentual` é `Int` no schema e `@IsInt() @Min(0)` no DTO. Banco e DTO em conformidade com o invariante.
++- **Criptografia no upsert de credenciais:** `upsertCredentials` do service chama `CryptoService.encrypt` antes do `repository.upsertCredential`. O repository recebe já o valor criptografado.
++- **GET nunca descriptografa:** `toProviderDetail` retorna apenas `{ chave, ambiente, configurado: true }` — nenhum valor em plaintext ou ciphertext é exposto nas listagens.
++- **Chave de criptografia via env:** `CryptoService.onModuleInit` usa `ConfigService.getOrThrow('PII_ENCRYPTION_KEY')` com validação de comprimento. Nenhum hardcode.
++- **Idempotência de webhook:** `createWebhookEvent` usa constraint `UNIQUE (provider, event_id)` e captura `P2002` para retornar `duplicate: true` sem lançar erro.
++- **MAQUININHA_POINT:** validação implementada no service antes do upsert.
++- **Guard coverage:** `JwtSystemGuard` + `RolesGuard` são `APP_GUARD` global. Tax-config usa `@Roles(ADMINISTRADOR)` no nível da classe. Payment-config usa `@Roles(ADMINISTRADOR)` em cada método individualmente (equivalente).
++- **Camadas respeitadas:** controller sem lógica, service orquestra invariantes, repository concentra queries Prisma.
++- **Taxas monetárias:** `taxa_percentual` e `taxa_fixa_centavos` são `Int` no schema e `@IsInt() @Min(0)` no DTO.
+diff --git a/docs/specs/feat-24-nf-entrada/architecture.md b/docs/specs/feat-24-nf-entrada/architecture.md
+new file mode 100644
+index 0000000..29dc357
+--- /dev/null
++++ b/docs/specs/feat-24-nf-entrada/architecture.md
+@@ -0,0 +1,199 @@
++# Arquitetura — Notas Fiscais de Entrada (feat/24)
++
++## Visão geral (antes → depois)
++
++Antes: sem registro de notas de compra. Lotes criados manualmente via `POST /lots`; estoque movimentado por `POST /stock/movements`. Fornecedores sem vínculo a notas. `Lot.invoice_item_id` orphan (campo sem FK).
++
++Depois: módulo `nf-entrada` gerencia o ciclo de vida de notas fiscais de compra — upload de XML ou cadastro manual, vinculação de itens a produtos existentes, confirmação que cria Lotes + StockMovements de forma atômica e idempotente.
++
++## Componentes afetados
++
++### Novos modelos (schema.prisma + migration)
++- `NfEntradaStatus` enum: `RASCUNHO | CONFIRMADA | CANCELADA`
++- `NfEntrada` — cabeçalho da nota
++- `NfEntradaItem` — itens da nota
++
++### Alterações em modelos existentes
++- `Lot.invoice_item_id` — adiciona FK `@relation` para `NfEntradaItem` (campo já existe, apenas formaliza a relação)
++- `Supplier` — back-relation `nf_entradas NfEntrada[]`
++- `Product` — back-relation `nf_entrada_items NfEntradaItem[]`
++- `Brand` — back-relation `nf_entrada_items NfEntradaItem[]`
++
++### Novo módulo
++- `apps/api/src/modules/nf-entrada/`
++
++### Dependência nova
++- `fast-xml-parser` v4 para parsing de XML NFe
++
++## Modelo de dados
++
++```prisma
++enum NfEntradaStatus {
++  RASCUNHO
++  CONFIRMADA
++  CANCELADA
++}
++
++model NfEntrada {
++  id            String          @id @default(uuid())
++  unidade_id    String
++  fornecedor_id String?
++  numero        String          @db.VarChar(10)
++  serie         String?         @db.VarChar(3)
++  chave_acesso  String?         @db.Char(44)
++  data_emissao  DateTime        @db.Date
++  data_entrada  DateTime?       @db.Date
++  valor_total   Int             // centavos
++  status        NfEntradaStatus @default(RASCUNHO)
++  xml_url       String?
++  pdf_url       String?
++  observacao    String?         @db.Text
++  created_by    String
++  created_at    DateTime        @default(now())
++  updated_at    DateTime        @updatedAt
++
++  unidade    Unit         @relation(fields: [unidade_id], references: [id])
++  fornecedor Supplier?    @relation(fields: [fornecedor_id], references: [id])
++  items      NfEntradaItem[]
++
++  @@unique([unidade_id, chave_acesso])
++  @@index([unidade_id, status])
++  @@index([fornecedor_id])
++  @@map("nf_entradas")
++}
++
++model NfEntradaItem {
++  id              String    @id @default(uuid())
++  nf_entrada_id   String
++  numero_item     Int
++  codigo_produto  String?   @db.VarChar(60)
++  ean             String?   @db.VarChar(14)
++  descricao       String    @db.VarChar(500)
++  ncm             String?   @db.VarChar(8)
++  cfop            String?   @db.VarChar(4)
++  unidade_medida  String?   @db.VarChar(6)
++  quantidade      Decimal   @db.Decimal(12, 3)
++  valor_unitario  Int       // centavos
++  valor_total     Int       // centavos
++  lote_numero     String?   @db.VarChar(100)
++  data_validade   DateTime? @db.Date
++  data_fabricacao DateTime? @db.Date
++  // Vínculo definido pelo operador (antes de confirmar):
++  product_id      String?
++  brand_id        String?
++
++  nf_entrada NfEntrada @relation(fields: [nf_entrada_id], references: [id], onDelete: Cascade)
++  product    Product?  @relation(fields: [product_id], references: [id])
++  brand      Brand?    @relation(fields: [brand_id], references: [id])
++  lot        Lot?      // back-relation de Lot.invoice_item_id
++
++  @@index([nf_entrada_id])
++  @@map("nf_entrada_items")
++}
++```
++
++## Endpoints
++
++| Método | Rota | Role | Descrição |
++|--------|------|------|-----------|
++| `POST` | `/nf-entrada/from-xml` | ADMINISTRADOR | Upload XML NFe → parse → retorna NF rascunho com itens |
++| `POST` | `/nf-entrada` | ADMINISTRADOR | Criação manual (sem XML) |
++| `GET` | `/nf-entrada` | ADMINISTRADOR | Listar (paginado, filtros: status, fornecedor, datas) |
++| `GET` | `/nf-entrada/:id` | ADMINISTRADOR | Detalhe com itens |
++| `PATCH` | `/nf-entrada/:id` | ADMINISTRADOR | Atualizar cabeçalho (apenas RASCUNHO) |
++| `PATCH` | `/nf-entrada/:id/items/:itemId` | ADMINISTRADOR | Vincular produto/marca a item |
++| `PATCH` | `/nf-entrada/:id/items` | ADMINISTRADOR | Bulk: aplicar brand_id a todos os itens |
++| `POST` | `/nf-entrada/:id/attach-pdf` | ADMINISTRADOR | Upload do PDF/DANFE |
++| `POST` | `/nf-entrada/:id/confirm` | ADMINISTRADOR | Confirmar → cria Lotes + StockMovements |
++| `POST` | `/nf-entrada/:id/cancel` | ADMINISTRADOR | Cancelar (apenas RASCUNHO) |
++
++## Fluxo de confirmação
++
++```
++POST /nf-entrada/:id/confirm
++  ↓
++Verificar status = RASCUNHO
++Verificar todos os items têm product_id definido
++  ↓
++Para cada item (em transação $transaction):
++  1. LotsService.create({ product_id, code: lote_numero || auto-gen, quantity_received, expires_at, invoice_item_id: item.id, ... })
++  2. StockService/Repository: criar StockMovement(type=PURCHASE_ENTRY, idempotency_key=nf-confirm-{item.id})
++  ↓
++UPDATE nf_entradas SET status=CONFIRMADA
++```
++
++**Idempotência:** `idempotency_key = 'nf-confirm-{item.id}'` — confirmar duas vezes é seguro (segunda falha em unique constraint, não gera duplicata).
++
++## Parsing de XML NFe
++
++```typescript
++import { XMLParser } from 'fast-xml-parser';
++
++const parser = new XMLParser({
++  ignoreAttributes: false,
++  attributeNamePrefix: '@_',
++  parseTagValue: false,      // manter strings para evitar perda de precisão monetária
++  isArray: (name, jpath) =>
++    name === 'det' || name === 'rastro',
++});
++
++const parsed = parser.parse(xmlString);
++const infNFe = parsed?.nfeProc?.NFe?.infNFe ?? parsed?.NFe?.infNFe;
++// chave_acesso: infNFe['@_Id'].replace(/^NFe/, '')
++// items: infNFe.det (always array)
++// valor monetário: Math.round(parseFloat(infNFe.det[n].prod.vUnCom) * 100)
++```
++
++## Auto-criação de fornecedor
++
++Ao fazer upload de XML:
++1. Extrair `emit.CNPJ` do XML (14 dígitos)
++2. Verificar se existe `Supplier` com `document = cnpj AND unidade_id = unitId`
++3. Se existe: vincular `fornecedor_id`
++4. Se não existe: criar Supplier com `razao_social = emit.xNome`, `document = cnpj` (status ativo)
++
++## Padrões mantidos
++
++- Controller → Service → Repository; sem regra no controller
++- TenancyService via `@Global()` — sem import explícito
++- DTOs com `class-validator`; whitelist global
++- Guards `JwtSystemGuard` + `RolesGuard` via APP_GUARD global
++- Swagger docs em todos os endpoints
++- Escopo obrigatório: todas as queries filtram por `unidade_id`
++- Valores monetários em centavos (Int), nunca float
++- `StorageFolder.INVOICE_XML` e `INVOICE_PDF` já definidos — usados para armazenar os arquivos
++
++## Dependências de módulo
++
++```typescript
++@Module({
++  imports: [
++    LotsModule,      // LotsService para criar lotes
++    StockModule,     // StockService/Repository para criar movimentos
++    SuppliersModule, // SuppliersService para auto-criar fornecedor
++    StorageModule,   // StorageService para salvar XML/PDF
++  ],
++})
++export class NfEntradaModule {}
++```
++
++Cada um desses módulos deve exportar seu Service/Repository. Se não exportar, o construtor-de-modulo deve adicionar o export.
++
++## Trade-offs
++
++- **XML parsing síncrono**: NF-e XMLs têm no máximo ~990 itens e < 1MB. Parsing síncrono na request é aceitável. Queue seria over-engineering para este volume.
++- **Confirmação síncrona**: Para uma NF típica (< 100 itens), criar lotes + movimentos dentro da request é aceitável. Para NFs grandes (> 200 itens), considerar queue em P2.
++- **Produto deve existir antes de confirmar**: Evita criação de produtos "lixo" sem dados mínimos de precificação. O operador vincula manualmente ou cria o produto pela rota padrão.
++- **Sem emissão de NFe**: Emissão via plataforma fiscal é P2. Este módulo só gerencia *entrada* (compra).
++
++## Principais arquivos a criar
++
++- `apps/api/prisma/schema.prisma` — adicionar NfEntrada, NfEntradaItem, back-relations
++- `apps/api/prisma/migrations/20260617140000_nf_entrada/migration.sql`
++- `apps/api/src/modules/nf-entrada/nf-entrada.module.ts`
++- `apps/api/src/modules/nf-entrada/nf-entrada.controller.ts`
++- `apps/api/src/modules/nf-entrada/nf-entrada.service.ts`
++- `apps/api/src/modules/nf-entrada/nf-entrada.repository.ts`
++- `apps/api/src/modules/nf-entrada/xml-parser.service.ts`
++- `apps/api/src/modules/nf-entrada/dto/` (create, update, update-item, bulk-brand, query, attach-pdf)
++- `apps/api/src/app.module.ts` — importar NfEntradaModule
+diff --git a/docs/specs/feat-24-nf-entrada/commits.txt b/docs/specs/feat-24-nf-entrada/commits.txt
+new file mode 100644
+index 0000000..e69de29
+diff --git a/docs/specs/feat-24-nf-entrada/diff.patch b/docs/specs/feat-24-nf-entrada/diff.patch
+new file mode 100644
+index 0000000..e69de29
+diff --git a/docs/specs/feat-24-nf-entrada/plan.md b/docs/specs/feat-24-nf-entrada/plan.md
+new file mode 100644
+index 0000000..8dab5d0
+--- /dev/null
++++ b/docs/specs/feat-24-nf-entrada/plan.md
+@@ -0,0 +1,299 @@
++# Notas Fiscais de Entrada (feat/24)
++
++Se retomando este trabalho, leia `architecture.md` e retome a última fase incompleta.
++
++## FASE 1 — Schema + Migration [Não Iniciada ⏳]
++
++### Tarefa A — schema.prisma
++Adicionar ao `apps/api/prisma/schema.prisma`:
++1. Enum `NfEntradaStatus { RASCUNHO CONFIRMADA CANCELADA }`
++2. Model `NfEntrada` (ver architecture.md — campos, relations, index, map)
++3. Model `NfEntradaItem` (ver architecture.md)
++4. Back-relations em modelos existentes:
++   - `Supplier.nf_entradas NfEntrada[]`
++   - `Product.nf_entrada_items NfEntradaItem[]`
++   - `Brand.nf_entrada_items NfEntradaItem[]`
++   - `Lot.invoice_item NfEntradaItem? @relation(fields: [invoice_item_id], references: [id])` (formalizar FK do campo orphan existente)
++
++### Tarefa B — Migration
++Criar `apps/api/prisma/migrations/20260617140000_nf_entrada/migration.sql`:
++```sql
++CREATE TYPE "NfEntradaStatus" AS ENUM ('RASCUNHO', 'CONFIRMADA', 'CANCELADA');
++
++CREATE TABLE "nf_entradas" (
++  "id"            TEXT NOT NULL,
++  "unidade_id"    TEXT NOT NULL,
++  "fornecedor_id" TEXT,
++  "numero"        VARCHAR(10) NOT NULL,
++  "serie"         VARCHAR(3),
++  "chave_acesso"  CHAR(44),
++  "data_emissao"  DATE NOT NULL,
++  "data_entrada"  DATE,
++  "valor_total"   INTEGER NOT NULL DEFAULT 0,
++  "status"        "NfEntradaStatus" NOT NULL DEFAULT 'RASCUNHO',
++  "xml_url"       TEXT,
++  "pdf_url"       TEXT,
++  "observacao"    TEXT,
++  "created_by"    TEXT NOT NULL,
++  "created_at"    TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
++  "updated_at"    TIMESTAMP(3) NOT NULL,
++  CONSTRAINT "nf_entradas_pkey" PRIMARY KEY ("id")
++);
++
++CREATE UNIQUE INDEX "nf_entradas_unidade_id_chave_acesso_key" ON "nf_entradas"("unidade_id", "chave_acesso") WHERE "chave_acesso" IS NOT NULL;
++CREATE INDEX "idx_nf_entradas_unidade_status" ON "nf_entradas"("unidade_id", "status");
++CREATE INDEX "idx_nf_entradas_fornecedor" ON "nf_entradas"("fornecedor_id");
++
++ALTER TABLE "nf_entradas" ADD CONSTRAINT "nf_entradas_unidade_id_fkey" FOREIGN KEY ("unidade_id") REFERENCES "units"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
++ALTER TABLE "nf_entradas" ADD CONSTRAINT "nf_entradas_fornecedor_id_fkey" FOREIGN KEY ("fornecedor_id") REFERENCES "suppliers"("id") ON DELETE SET NULL ON UPDATE CASCADE;
++
++CREATE TABLE "nf_entrada_items" (
++  "id"              TEXT NOT NULL,
++  "nf_entrada_id"   TEXT NOT NULL,
++  "numero_item"     INTEGER NOT NULL,
++  "codigo_produto"  VARCHAR(60),
++  "ean"             VARCHAR(14),
++  "descricao"       VARCHAR(500) NOT NULL,
++  "ncm"             VARCHAR(8),
++  "cfop"            VARCHAR(4),
++  "unidade_medida"  VARCHAR(6),
++  "quantidade"      DECIMAL(12,3) NOT NULL,
++  "valor_unitario"  INTEGER NOT NULL,
++  "valor_total"     INTEGER NOT NULL,
++  "lote_numero"     VARCHAR(100),
++  "data_validade"   DATE,
++  "data_fabricacao" DATE,
++  "product_id"      TEXT,
++  "brand_id"        TEXT,
++  "created_at"      TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
++  "updated_at"      TIMESTAMP(3) NOT NULL,
++  CONSTRAINT "nf_entrada_items_pkey" PRIMARY KEY ("id")
++);
++
++CREATE INDEX "idx_nf_entrada_items_nf" ON "nf_entrada_items"("nf_entrada_id");
++CREATE INDEX "idx_nf_entrada_items_product" ON "nf_entrada_items"("product_id");
++
++ALTER TABLE "nf_entrada_items" ADD CONSTRAINT "nf_entrada_items_nf_entrada_id_fkey" FOREIGN KEY ("nf_entrada_id") REFERENCES "nf_entradas"("id") ON DELETE CASCADE ON UPDATE CASCADE;
++ALTER TABLE "nf_entrada_items" ADD CONSTRAINT "nf_entrada_items_product_id_fkey" FOREIGN KEY ("product_id") REFERENCES "products"("id") ON DELETE SET NULL ON UPDATE CASCADE;
++ALTER TABLE "nf_entrada_items" ADD CONSTRAINT "nf_entrada_items_brand_id_fkey" FOREIGN KEY ("brand_id") REFERENCES "brands"("id") ON DELETE SET NULL ON UPDATE CASCADE;
++
++-- Formalizar FK orphan existente em lots.invoice_item_id → nf_entrada_items.id
++ALTER TABLE "lots" ADD CONSTRAINT "lots_invoice_item_id_fkey" FOREIGN KEY ("invoice_item_id") REFERENCES "nf_entrada_items"("id") ON DELETE SET NULL ON UPDATE CASCADE;
++```
++
++### Testes desta fase
++- [ ] `pnpm --filter @zk/api exec tsc --noEmit` sem erros após schema changes
++- [ ] Migration aplica sem erros em banco local
++
++## FASE 2 — XML Parser Service [Não Iniciada ⏳]
++
++### Tarefa A — instalar fast-xml-parser
++```bash
++pnpm --filter @zk/api add fast-xml-parser
++```
++
++### Tarefa B — xml-parser.service.ts
++`apps/api/src/modules/nf-entrada/xml-parser.service.ts`:
++- `@Injectable()` standalone (sem depender de Prisma)
++- `parse(xmlBuffer: Buffer): ParsedNfXml` — retorna objeto tipado com campos do cabeçalho e itens
++- Configuração XMLParser: `ignoreAttributes: false, attributeNamePrefix: '@_', parseTagValue: false, isArray: (name) => ['det','rastro'].includes(name)`
++- Extrai:
++  - `chaveAcesso`: `infNFe['@_Id'].replace(/^NFe/, '')`
++  - `numero`: `ide.nNF`
++  - `serie`: `ide.serie`
++  - `dataEmissao`: `ide.dhEmi`
++  - `emitCnpj`: `emit.CNPJ`
++  - `emitNome`: `emit.xNome`
++  - `valorTotal`: `Math.round(parseFloat(total.ICMSTot.vNF) * 100)`
++  - `items[]`: para cada `det`:
++    - `numeroItem`, `ean`, `codigoProduto`, `descricao`, `ncm`, `cfop`, `unidadeMedida`
++    - `quantidade`: `parseFloat(prod.qCom)`
++    - `valorUnitario`: `Math.round(parseFloat(prod.vUnCom) * 100)`
++    - `valorTotal`: `Math.round(parseFloat(prod.vProd) * 100)`
++    - `rastro`: pegar o primeiro elemento (se array), extrair `loteNumero`, `dataValidade`, `dataFabricacao`
++- `class ParsedNfXml { ... }` com tipos explícitos — sem `any`
++- Lança `UnprocessableEntityException` se XML mal-formado ou elemento obrigatório ausente
++
++### Testes desta fase
++- [ ] Parsing de XML NFe real com 1 item retorna campos corretos
++- [ ] Parsing de XML NFe com múltiplos `det` retorna array correto
++- [ ] XML sem `rastro` não falha
++- [ ] `cEAN = 'SEM GTIN'` é normalizado para `null`
++
++## FASE 3 — DTOs [Não Iniciada ⏳]
++
++`apps/api/src/modules/nf-entrada/dto/`:
++
++**`create-nf.dto.ts`** — criação manual:
++```typescript
++class CreateNfDto {
++  @IsString() @IsOptional() @IsUUID() fornecedor_id?: string
++  @IsString() @MaxLength(10) numero: string
++  @IsString() @IsOptional() @MaxLength(3) serie?: string
++  @IsString() @IsOptional() @Matches(/^\d{44}$/) chave_acesso?: string
++  @IsISO8601() data_emissao: string
++  @IsISO8601() @IsOptional() data_entrada?: string
++  @IsInt() @Min(0) valor_total: number
++  @IsString() @IsOptional() @MaxLength(1000) observacao?: string
++  @IsArray() @ValidateNested({ each: true }) @Type(() => CreateNfItemDto) items: CreateNfItemDto[]
++}
++
++class CreateNfItemDto {
++  @IsInt() @Min(1) numero_item: number
++  @IsString() @IsOptional() @MaxLength(60) codigo_produto?: string
++  @IsString() @IsOptional() @MaxLength(14) ean?: string
++  @IsString() @MaxLength(500) descricao: string
++  @IsString() @IsOptional() @MaxLength(8) ncm?: string
++  @IsString() @IsOptional() @MaxLength(4) cfop?: string
++  @IsString() @IsOptional() @MaxLength(6) unidade_medida?: string
++  @IsNumber() @Min(0) quantidade: number
++  @IsInt() @Min(0) valor_unitario: number
++  @IsInt() @Min(0) valor_total: number
++  @IsString() @IsOptional() @MaxLength(100) lote_numero?: string
++  @IsISO8601() @IsOptional() data_validade?: string
++  @IsISO8601() @IsOptional() data_fabricacao?: string
++  @IsUUID() @IsOptional() product_id?: string
++  @IsUUID() @IsOptional() brand_id?: string
++}
++```
++
++**`update-nf.dto.ts`** — atualizar cabeçalho:
++```typescript
++class UpdateNfDto {
++  @IsUUID() @IsOptional() fornecedor_id?: string
++  @IsISO8601() @IsOptional() data_entrada?: string
++  @IsString() @IsOptional() @MaxLength(1000) observacao?: string
++}
++```
++
++**`update-nf-item.dto.ts`** — vincular produto/marca:
++```typescript
++class UpdateNfItemDto {
++  @IsUUID() @IsOptional() product_id?: string
++  @IsUUID() @IsOptional() brand_id?: string
++  @IsString() @IsOptional() @MaxLength(100) lote_numero?: string
++  @IsISO8601() @IsOptional() data_validade?: string
++  @IsISO8601() @IsOptional() data_fabricacao?: string
++}
++```
++
++**`bulk-brand.dto.ts`** — aplicar marca a todos os itens:
++```typescript
++class BulkBrandDto {
++  @IsUUID() brand_id: string
++}
++```
++
++**`query-nf.dto.ts`**:
++```typescript
++class QueryNfDto {
++  @IsEnum(NfEntradaStatus) @IsOptional() status?: NfEntradaStatus
++  @IsUUID() @IsOptional() fornecedor_id?: string
++  @IsISO8601() @IsOptional() data_inicio?: string
++  @IsISO8601() @IsOptional() data_fim?: string
++  @IsInt() @Min(1) @IsOptional() @Type(Number) page: number = 1
++  @IsInt() @Min(1) @Max(100) @IsOptional() @Type(Number) limit: number = 20
++}
++```
++
++## FASE 4 — Repository [Não Iniciada ⏳]
++
++`apps/api/src/modules/nf-entrada/nf-entrada.repository.ts`:
++
++```typescript
++findAll(unitId, filters, pagination)                        // paginado, inclui fornecedor (select parcial)
++findById(id, unitId)                                        // com items (include items)
++create(data: CreateNfInput)                                 // cabeçalho + items via nested write
++update(id, unitId, data: Prisma.NfEntradaUpdateInput)       // apenas RASCUNHO
++updateItem(itemId, nfId, data: Prisma.NfEntradaItemUpdateInput) // com check nf_entrada_id = nfId (TOCTOU)
++bulkSetBrand(nfId, unitId, brandId)                         // UPDATE SET brand_id WHERE nf_entrada_id AND nf.unidade_id
++updateStatus(id, unitId, status)                            // CONFIRMADA | CANCELADA
++countUnlinkedItems(nfId, unitId)                            // count items WHERE product_id IS NULL
++findItemsByNf(nfId, unitId)                                 // para confirmar
++```
++
++Todos os métodos de mutação incluem `unidade_id` no WHERE (TOCTOU prevention).
++
++## FASE 5 — Service [Não Iniciada ⏳]
++
++`apps/api/src/modules/nf-entrada/nf-entrada.service.ts`:
++
++- `createFromXml(buffer, dto, user)` — parse XML, auto-cria/vincula fornecedor, salva arquivo, cria NF rascunho
++- `create(dto, user)` — criação manual
++- `listNfs(query, user)` — paginado
++- `getNf(id, user)` — com items
++- `updateNf(id, dto, user)` — valida RASCUNHO
++- `updateItem(id, itemId, dto, user)` — valida product_id existe na unidade
++- `bulkSetBrand(id, dto, user)` — aplica brand a todos os items
++- `attachPdf(id, buffer, user)` — armazena PDF via StorageService, atualiza pdf_url
++- `confirmNf(id, user)` — valida todos items vinculados → $transaction: cria lotes + movimentos → marca CONFIRMADA
++- `cancelNf(id, user)` — valida RASCUNHO → marca CANCELADA
++
++### confirmNf em detalhe:
++```
++1. findById(id, unitId) — lança 404 se não encontrado
++2. Se status != RASCUNHO → 422 ("Apenas notas em rascunho podem ser confirmadas")
++3. countUnlinkedItems(id) > 0 → 422 ("X itens sem produto vinculado")
++4. findItemsByNf(id, unitId) → items[]
++5. prisma.$transaction(async (tx) => {
++     for (const item of items) {
++       const lot = await lotsRepository.createWithTx(tx, {
++         unidade_id: unitId,
++         product_id: item.product_id,
++         code: item.lote_numero || `NF${nf.numero}-I${item.numero_item}`,
++         quantity_received: item.quantidade,
++         expires_at: item.data_validade,
++         manufactured_at: item.data_fabricacao,
++         invoice_item_id: item.id,
++       });
++       await stockRepository.createMovementWithTx(tx, {
++         unidade_id: unitId,
++         product_id: item.product_id,
++         lot_id: lot.id,
++         type: StockMovementType.PURCHASE_ENTRY,
++         quantity: item.quantidade,
++         reference_id: item.id,
++         reference_type: 'invoice_item',
++         idempotency_key: `nf-confirm-${item.id}`,
++         notes: `NF ${nf.numero} - Item ${item.numero_item}`,
++         created_by: user.sub,
++       });
++     }
++     await tx.nfEntrada.update({ where: { id, unidade_id: unitId }, data: { status: 'CONFIRMADA' } });
++   })
++```
++
++## FASE 6 — Controller + Module [Não Iniciada ⏳]
++
++**`nf-entrada.controller.ts`** — todos os endpoints (ver architecture.md).
++- `POST /nf-entrada/from-xml` usa `@UseInterceptors(FileInterceptor('xml'))` + `@UploadedFile()`
++- `POST /nf-entrada/:id/attach-pdf` usa `FileInterceptor('pdf')`
++- Todos com `@Roles(SystemRole.ADMINISTRADOR)` exceto `GET` que aceita `OPERADOR_PDV` também
++
++**`nf-entrada.module.ts`**:
++```typescript
++@Module({
++  imports: [LotsModule, StockModule, SuppliersModule, StorageModule],
++  controllers: [NfEntradaController],
++  providers: [NfEntradaRepository, NfEntradaService, XmlParserService],
++})
++```
++
++**`app.module.ts`**: adicionar `NfEntradaModule`.
++
++### Testes desta fase
++- [ ] `pnpm --filter @zk/api exec tsc --noEmit` sem erros
++- [ ] `POST /nf-entrada` manual → 201
++- [ ] `POST /nf-entrada/:id/confirm` sem itens vinculados → 422
++- [ ] `POST /nf-entrada/:id/confirm` com todos vinculados → Lote criado + StockMovement criado
++- [ ] Double-confirm (idempotency_key) → não duplica movimento
++
++## Invariantes críticos (checar em cada fase)
++
++- `unidade_id` obrigatório em TODA query de mutação (TOCTOU prevention)
++- NF CONFIRMADA é imutável — update/cancel devem rejeitar 422
++- Valores monetários em centavos (Int), nunca float
++- Criação de Lote + StockMovement dentro de `$transaction` — sem estado parcial
++- `idempotency_key = 'nf-confirm-{item.id}'` — confirmar duas vezes é idempotente
++- `StorageFolder.INVOICE_XML` / `INVOICE_PDF` são PROTECTED_FOLDERS (never delete)
++- CNPJ do fornecedor: validar formato 14 dígitos antes de criar/vincular
+diff --git a/docs/specs/feat-24-nf-entrada/pre-pr-report.md b/docs/specs/feat-24-nf-entrada/pre-pr-report.md
+new file mode 100644
+index 0000000..74d8c45
+--- /dev/null
++++ b/docs/specs/feat-24-nf-entrada/pre-pr-report.md
+@@ -0,0 +1,105 @@
++# Pre-PR Report — feat-24-nf-entrada
++
++## revisor-erp
++
++Data: 2026-06-17
++
++### Critico (precisa corrigir)
++
++**C1 — TOCTOU na confirmação: status verificado fora da transação / lot.create não atômico**
++- Arquivo: `apps/api/src/modules/nf-entrada/nf-entrada.service.ts`, linhas 267-285 e 290-313
++- O `nf.status` é lido e validado FORA do `$transaction` (linha 267-270), antes de entrar na transação (linha 285). Duas requisições simultâneas de `POST /:id/confirm` passam ambas pelo check de RASCUNHO antes de qualquer commit. Dentro da transação, o `lot.create` usa `findFirst` + `create` condicional (check-then-act, linhas 290-313), não atômico: ambas as transações concorrentes encontrarão `existingLot = null` e tentarão criar o mesmo lote, resultando em lotes duplicados. O `StockMovement.upsert` com `idempotency_key` evita duplicação do movement, mas o lote terá `quantity_received` duplicado.
++- Correção: mover a leitura e a validação de status para DENTRO da transação e usar `tx.lot.upsert` (necessita `@@unique([unidade_id, product_id, code])` no schema) ou `createMany ... ON CONFLICT DO NOTHING`, para tornar a operação atômica.
++
++**C2 — `updateItem` no repository não inclui `unidade_id` no WHERE**
++- Arquivo: `apps/api/src/modules/nf-entrada/nf-entrada.repository.ts`, linha 138-143
++- O método `updateItem` usa `where: { id: itemId, nf_entrada_id: nfId }` sem filtrar por `unidade_id`. O service faz um `findById(id, unitId)` antes (service linha 198), mas isso cria uma janela TOCTOU: a verificação de tenancy acontece antes da mutação, sem lock. Um item de outra unidade com o mesmo `itemId` + `nfId` poderia ser mutado se o NF for reparentado entre a leitura e o update.
++- Correção: adicionar `nf_entrada: { unidade_id: unitId }` no `where` do `updateItem` (como já feito em `countUnlinkedItems` e `findItemsByNf`), e passar `unitId` como parâmetro.
++
++### Aviso (deveria corrigir)
++
++**A1 — CNPJ do emitente (XML) apenas validado por comprimento, não por dígito verificador**
++- Arquivo: `apps/api/src/modules/nf-entrada/xml-parser.service.ts`, linhas 80-84
++- O parser verifica apenas `emitCnpj.length !== 14`. A validação por DV só acontece em `resolveOrCreateSupplier` (service linha 363), que retorna `null` silenciosamente se o CNPJ for inválido — a NF é criada sem fornecedor sem qualquer aviso ao operador.
++- Correção: chamar `validateCnpj(emitCnpj)` no parser e lançar `UnprocessableEntityException` se inválido, ou ao menos logar e retornar aviso no response.
++
++**A2 — Campo `origem` (MANUAL/XML) ausente no modelo `NfEntrada`**
++- Arquivo: `apps/api/prisma/schema.prisma`, model `NfEntrada` (linha 861)
++- A skill `fiscal-br` especifica: "persista a origem (MANUAL ou XML)". O schema não tem esse campo. Sem ele não é possível distinguir, em auditoria, uma NF criada por XML de uma criada manualmente.
++- Correção: adicionar `origem NfEntradaOrigem @default(MANUAL)` ao model e migration, e preenchê-lo em `createFromXml` e `create`.
++
++### Sugestao (bom ter)
++
++**S1 — `CreateNfDto` permite `items: []` (array vazio)**
++- Arquivo: `apps/api/src/modules/nf-entrada/dto/create-nf.dto.ts`, linha 120
++- Não há `@ArrayMinSize(1)`. Uma NF sem itens pode ser criada via `POST /nf-entrada`, o que vai gerar erros silenciosos em confirmação.
++- Correção: adicionar `@ArrayMinSize(1)` ao campo `items`.
++
++**S2 — `toMoney` usa `parseFloat` como intermediário**
++- Arquivo: `apps/api/src/modules/nf-entrada/xml-parser.service.ts`, linhas 38-39
++- `Math.round(parseFloat(val) * 100)` é o padrão adotado e protegido pelo `Math.round`. Para strings monetárias com mais de 12 dígitos significativos pode haver imprecisão de ponto flutuante. Considerar usar uma lib Decimal (ex: `big.js`) para a conversão.
++
++---
++
++*Revisão gerada pelo agente `revisor-erp` com base no commit `29cb31e`.*
++
++## auditor-seguranca-lgpd
++
++Data: 2026-06-17
++
++### Alto
++
++**SEC-1 — Multer sem limite de tamanho antes do parsing XML (DoS parcial)**
++- Arquivo: `apps/api/src/modules/nf-entrada/nf-entrada.controller.ts`, linhas 41–55; `apps/api/src/modules/nf-entrada/nf-entrada.service.ts`, linhas 40–67
++- `FileInterceptor('xml')` é chamado sem opções `limits: { fileSize }`. O parser XML (`xmlParser.parse(xmlBuffer)`, linha 40 do service) é executado ANTES de `storage.upload` (linha 59), que é onde o limite de tamanho (`FOLDER_MAX_SIZES.fiscal = 10 MB`) e a validação de MIME são aplicados. Um atacante autenticado como `OPERADOR_ESTOQUE_COMPRAS` pode enviar um payload XML arbitrariamente grande: Multer o aceita integralmente em memória, o parser o processa, e apenas depois a exceção de tamanho é lançada. O mesmo vale para `attachPdf` (controller linha 145, service linha 251–263).
++- Correção: configurar `FileInterceptor('xml', { limits: { fileSize: 10 * 1024 * 1024 } })` (e análogo para o PDF) para rejeitar o upload na camada de transporte, antes de qualquer processamento. Mover a validação de MIME/tamanho para antes da chamada ao parser.
++
++**SEC-2 — fast-xml-parser: `processEntities.maxTotalExpansions` é `Infinity` (risco de Billion Laughs / amplificação de entidades)**
++- Arquivo: `apps/api/src/modules/nf-entrada/xml-parser.service.ts`, linhas 31–36; node_modules: `fast-xml-parser@5.9.2/src/xmlparser/OptionsBuilder.js`, linha 98
++- O parser é instanciado sem configurar `processEntities`. O padrão da lib é `maxTotalExpansions: Infinity`, limitado apenas por `maxExpandedLength: 100000` caracteres por expansão. Um XML com entidades recursivamente aninhadas (Billion Laughs) pode amplificar o payload em memória e degradar o serviço mesmo dentro do limite de 10 MB declarado pelo storage — pois o parsing ocorre antes da validação de tamanho (ver SEC-1). Não há risco de XXE (a biblioteca não faz requisições HTTP/file para entidades externas), mas o DoS por expansão é real.
++- Correção: instanciar o parser com `processEntities: { allowBooleanAttributes: false, maxTotalExpansions: 1000, maxExpandedLength: 50000 }`. Adicionar também `stopNodes: ['*.#text']` para evitar acúmulo em nós de texto. Esses limites são suficientes para NFe legítimas.
++
++### Medio
++
++**SEC-3 — CORS aberto (`app.enableCors()` sem restrição de origem)**
++- Arquivo: `apps/api/src/main.ts`, linha 28
++- `app.enableCors()` sem `origin` aceita requisições de qualquer domínio. Para um ERP com endpoints de NFe, lotes e movimentos de estoque, isso significa que qualquer página web maliciosa pode induzir o navegador de um usuário autenticado a realizar chamadas cross-origin com o cookie/token dele.
++- Correção: definir `app.enableCors({ origin: process.env.ALLOWED_ORIGINS?.split(',') ?? false, credentials: true })` e injetar a variável de ambiente no deploy. Em produção, restringir apenas aos domínios do admin, PDV e e-commerce.
++
++**SEC-4 — Helmet ausente: headers de segurança HTTP não configurados**
++- Arquivo: `apps/api/src/main.ts` (ausência)
++- O bootstrap não instala `helmet`. Headers como `X-Frame-Options`, `Content-Security-Policy`, `X-Content-Type-Options`, `Strict-Transport-Security` e `Referrer-Policy` não são enviados. Para um sistema ERP acessado por browser, isso abre vetores de clickjacking, MIME-sniffing e downgrade de protocolo.
++- Correção: `import helmet from 'helmet'; app.use(helmet());` antes de `enableCors`. Considerar configuração conservadora de CSP.
++
++**SEC-5 — `storage/signed-url`: parâmetro `key` sem validação de formato (path traversal no driver local)**
++- Arquivo: `apps/api/src/common/storage/dto/signed-url-query.dto.ts`, linha 11; `apps/api/src/common/storage/drivers/local.driver.ts`, linha 47
++- O campo `key` é decorado apenas com `@IsString()` — qualquer string é aceita. No driver local de desenvolvimento (`local.driver.ts`), `fullPath = path.join(this.basePath, key.replace(/\//g, path.sep))` não valida se o caminho resolvido permanece dentro de `basePath`. Um `key` com `../../apps/api/.env` não é protegido por `path.normalize` + verificação de prefixo. Em produção (S3/R2) esse vetor não existe, mas o driver local pode ser ativado acidentalmente (`STORAGE_DRIVER=local`). O endpoint requer `ADMINISTRADOR`, limitando o impacto.
++- Correção: no `LocalDriver`, após `path.join`, verificar `if (!fullPath.startsWith(this.basePath + path.sep)) throw new UnprocessableEntityException(...)`. No DTO, adicionar `@Matches(/^[a-z0-9\-\/_.]+$/)` para restringir o formato de key a caracteres seguros.
++
++### Baixo
++
++**SEC-6 — Rate limiting global (60 req/min) pode não ser suficiente para upload de XML em brute-force**
++- Arquivo: `apps/api/src/app.module.ts`, linha 4 (`ThrottlerModule.forRoot([{ ttl: 60000, limit: 60 }])`)
++- 60 requisições por minuto por IP é suficiente para uso normal, mas endpoints de upload de arquivo (from-xml, attach-pdf) se beneficiariam de um limite específico mais restritivo (ex: 10/min) para reduzir a superfície de abuso por usuário autenticado com credenciais comprometidas.
++- Correção: aplicar `@Throttle({ default: { limit: 10, ttl: 60000 } })` no nível do controller ou dos métodos `createFromXml` e `attachPdf`.
++
++**SEC-7 — `chave_acesso` exposta no log de erro sem sanitização**
++- Arquivo: `apps/api/src/modules/nf-entrada/nf-entrada.service.ts`, linhas 45–48 e 102–106
++- As exceções `ConflictException` interpolam `parsed.chaveAcesso` diretamente na mensagem: `NF com chave de acesso ${parsed.chaveAcesso} já cadastrada nesta unidade`. A chave de acesso da NFe tem 44 dígitos e contém CNPJ, data e outros dados fiscais. Se a mensagem de erro for registrada em um log externo sem mascaramento, a chave ficará em claro nos logs.
++- Correção: não incluir a chave completa na mensagem de erro de resposta; usar apenas os últimos 8 dígitos ou uma referência opaca. Garantir que o interceptor de log mascare campos fiscais.
++
++---
++
++### Itens Conformes
++
++- **SQL injection (bulkSetBrand)**: `$executeRaw` usa tagged template literals com interpolação parametrizada (`${brandId}`, `${nfId}`, `${unitId}`) — Prisma converte para `$1/$2/$3` no driver. Zero concatenação de string. Conforme.
++- **CNPJ auto-create supplier**: `resolveOrCreateSupplier` chama `validateCnpjCpf(cnpj)` (dígito verificador) antes de qualquer operação no banco; o CNPJ é extraído do XML já limpo de não-dígitos; `razaoSocial` é fatiada com `.slice(0, 200)`. Conforme.
++- **Cross-unit isolation**: todas as queries do repository passam `unidade_id` (do contexto de tenancy, nunca de parâmetro do cliente). `bulkSetBrand` usa JOIN com `n.unidade_id = ${unitId}`. `findAll`, `findById`, `countUnlinkedItems`, `findItemsByNf` todos filtram por `unitId`. Conforme — ressalva de TOCTOU em `updateItem` já reportada pelo revisor-erp (C2).
++- **Autenticação e RBAC**: `JwtSystemGuard` + `RolesGuard` registrados como `APP_GUARD` global. Cada endpoint do controller declara `@Roles(...)` explicitamente. Cancelamento restrito a `ADMINISTRADOR`. Conforme.
++- **Validação de entrada**: `ValidationPipe` global com `whitelist: true` e `forbidNonWhitelisted: true`. DTOs com `class-validator` em todos os endpoints. `chave_acesso` validado por regex `^\d{44}$`. Conforme.
++- **MIME validation por magic bytes**: `StorageService.validate` usa `file-type` para detectar MIME pelo conteúdo do buffer, ignorando o `Content-Type` declarado pelo cliente. Conforme — exceto pela ordem de execução descrita em SEC-1.
++- **Path traversal no buildKey**: `buildKey` usa `randomUUID()` como nome de arquivo; do caller só extrai a extensão via `path.extname`. Nenhum componente de caminho do nome original é preservado. Conforme.
++- **Segredos**: JWT secret e credenciais de storage lidos via `ConfigService.getOrThrow` de variáveis de ambiente. Nenhum segredo hardcoded nos arquivos auditados. Conforme.
++- **Retenção fiscal**: `PROTECTED_FOLDERS` impede deleção de arquivos em `fiscal/xml` e `fiscal/pdf`. Conforme com obrigação de retenção de 5 anos.
++
++*Auditoria gerada pelo agente `auditor-seguranca-lgpd`. Escopo: módulo `nf-entrada` e dependências diretas (storage, auth, validators).*
+diff --git a/docs/specs/feat-38-ai-api-keys/context.md b/docs/specs/feat-38-ai-api-keys/context.md
+new file mode 100644
+index 0000000..03df465
+--- /dev/null
++++ b/docs/specs/feat-38-ai-api-keys/context.md
+@@ -0,0 +1,35 @@
++# Context — API Keys de IA (Spec 19)
++
++## Motivação
++Módulo 19 do PRD. Pré-requisito para spec 27 (Integração de IA). Unidades precisam configurar credenciais de provedores de LLM para que a API gere descrições, SEO e Schema.org automaticamente.
++
++## O que foi implementado
++
++### Endpoints
++- `POST /ai-keys` — cadastra key; criptografa antes de persistir
++- `GET /ai-keys?provider=OPENAI` — lista keys da unidade (valor mascarado: `sk-abc1...ef89`)
++- `GET /ai-keys/:id` — detalhe de uma key (mascarada)
++- `PATCH /ai-keys/:id` — atualiza label, valor ou status
++- `DELETE /ai-keys/:id` — remove key
++- `POST /ai-keys/:id/test` — faz chamada real ao provedor, retorna `{ ok, latency_ms, error? }`
++
++### Provedores suportados
++- OPENAI — `POST /v1/chat/completions`, Bearer token, modelo gpt-4o-mini
++- DEEPSEEK — `POST /chat/completions`, Bearer token, modelo deepseek-chat
++- GOOGLE_GEMINI — `POST /v1beta/models/gemini-1.5-flash:generateContent`, x-goog-api-key header
++- ANTHROPIC — `POST /v1/messages`, x-api-key header
++
++## Decisões de Arquitetura
++
++1. **Criptografia**: `CryptoService.encrypt()` (AES-256-GCM) antes de persistir. Valor nunca em texto claro no banco.
++2. **Mascaramento**: `key_masked` = primeiros 6 + últimos 4 chars, resto `****`. Valor real nunca retornado pela API.
++3. **Unicidade**: `@@unique([unidade_id, provider, label])` — mesma unidade pode ter múltiplas keys do mesmo provedor com labels diferentes.
++4. **Test endpoint**: chamada real com max_tokens=1, timeout 10s. Atualiza `last_tested_at`, `last_test_ok`, `last_test_latency_ms` no registro.
++5. **`resolveActiveKey`**: método interno exportado para uso pelo módulo de IA (spec 27) — retorna valor descriptografado para uso em runtime.
++6. **RBAC**: apenas ADMINISTRADOR. Decorator `@Roles` no nível do controller (aplica a todos os endpoints).
++7. **Tenancy**: `resolveUnitId` no início de cada operação de serviço.
++
++## Invariantes respeitados
++- Credencial nunca em texto claro no banco (`key_encrypted`)
++- Valor nunca retornado nas respostas HTTP (apenas `key_masked`)
++- Todas queries isoladas por `unidade_id` do contexto autenticado
+diff --git a/docs/specs/feat-38-ai-api-keys/diff.patch b/docs/specs/feat-38-ai-api-keys/diff.patch
+new file mode 100644
+index 0000000..e69de29
+diff --git a/docs/specs/feat-5-fornecedores-centro-custo/cost-center-done.txt b/docs/specs/feat-5-fornecedores-centro-custo/cost-center-done.txt
+new file mode 100644
+index 0000000..82cac3a
+--- /dev/null
++++ b/docs/specs/feat-5-fornecedores-centro-custo/cost-center-done.txt
+@@ -0,0 +1,3 @@
++Modulo cost-center criado em apps/api/src/modules/cost-center/ com controller, service, repository e 5 DTOs.
++Schema Prisma atualizado com TipoCusto, CostCenter e CostItem; relacoes adicionadas em Unit; prisma generate executado com sucesso.
++TypeScript compilou sem erros (tsc --noEmit); ESLint nao instalado no projeto (ausente do devDependencies).
+diff --git a/docs/specs/feat-5-fornecedores-centro-custo/diff.patch b/docs/specs/feat-5-fornecedores-centro-custo/diff.patch
+new file mode 100644
+index 0000000..ad661f8
+--- /dev/null
++++ b/docs/specs/feat-5-fornecedores-centro-custo/diff.patch
+@@ -0,0 +1,188 @@
++diff --git a/apps/api/prisma/schema.prisma b/apps/api/prisma/schema.prisma
++index ef3edc7..8bd793d 100644
++--- a/apps/api/prisma/schema.prisma
+++++ b/apps/api/prisma/schema.prisma
++@@ -163,6 +163,9 @@ model Unit {
++   config           UnitConfig?
++   brands           Brand[]
++   categories       Category[]
+++  suppliers        Supplier[]
+++  cost_centers     CostCenter[]
+++  cost_items       CostItem[]
++ 
++   // DB-level: partial unique index on (company_settings_id) WHERE tipo = 'MATRIZ' AND ativa = true
++   // Applied via raw migration: CREATE UNIQUE INDEX idx_one_matriz ON units (company_settings_id) WHERE tipo = 'MATRIZ' AND ativa = true;
++@@ -212,7 +215,8 @@ model Brand {
++   created_at       DateTime @default(now())
++   updated_at       DateTime @updatedAt
++ 
++-  unit Unit @relation(fields: [unidade_id], references: [id])
+++  unit      Unit            @relation(fields: [unidade_id], references: [id])
+++  suppliers SupplierBrand[]
++ 
++   @@unique([unidade_id, slug])
++   @@map("brands")
++@@ -240,3 +244,120 @@ model Category {
++ 
++   @@map("categories")
++ }
+++
+++// ─── Módulo 2: Fornecedores ───────────────────────────────────────────────────
+++
+++enum TipoDocumentoSupplier {
+++  CNPJ
+++  CPF
+++}
+++
+++model Supplier {
+++  id               String                @id @default(uuid())
+++  unidade_id       String
+++  document         String                @db.VarChar(14)
+++  document_type    TipoDocumentoSupplier
+++  razao_social     String                @db.VarChar(200)
+++  nome_fantasia    String?               @db.VarChar(200)
+++  email            String?               @db.VarChar(255)
+++  phone            String?               @db.VarChar(20)
+++  website          String?               @db.VarChar(512)
+++  logo_url         String?               @db.VarChar(512)
+++  logo_storage_key String?               @db.VarChar(512)
+++  active           Boolean               @default(true)
+++  notes            String?               @db.Text
+++  created_at       DateTime              @default(now())
+++  updated_at       DateTime              @updatedAt
+++
+++  unit      Unit              @relation(fields: [unidade_id], references: [id])
+++  addresses SupplierAddress[]
+++  contacts  SupplierContact[]
+++  brands    SupplierBrand[]
+++
+++  @@unique([unidade_id, document])
+++  @@map("suppliers")
+++}
+++
+++model SupplierAddress {
+++  id          String   @id @default(uuid())
+++  supplier_id String
+++  label       String   @db.VarChar(50)
+++  cep         String   @db.VarChar(8)
+++  logradouro  String   @db.VarChar(200)
+++  numero      String   @db.VarChar(20)
+++  complemento String?  @db.VarChar(100)
+++  bairro      String   @db.VarChar(100)
+++  cidade      String   @db.VarChar(100)
+++  estado      String   @db.Char(2)
+++  created_at  DateTime @default(now())
+++
+++  supplier Supplier @relation(fields: [supplier_id], references: [id])
+++
+++  @@map("supplier_addresses")
+++}
+++
+++model SupplierContact {
+++  id          String   @id @default(uuid())
+++  supplier_id String
+++  name        String   @db.VarChar(150)
+++  role        String?  @db.VarChar(100)
+++  email       String?  @db.VarChar(255)
+++  phone       String?  @db.VarChar(20)
+++  created_at  DateTime @default(now())
+++
+++  supplier Supplier @relation(fields: [supplier_id], references: [id])
+++
+++  @@map("supplier_contacts")
+++}
+++
+++model SupplierBrand {
+++  supplier_id String
+++  brand_id    String
+++
+++  supplier Supplier @relation(fields: [supplier_id], references: [id])
+++  brand    Brand    @relation(fields: [brand_id], references: [id])
+++
+++  @@id([supplier_id, brand_id])
+++  @@map("supplier_brands")
+++}
+++
+++// ─── Módulo 8: Centro de Custo ────────────────────────────────────────────────
+++
+++enum TipoCusto {
+++  FIXO
+++  VARIAVEL
+++}
+++
+++model CostCenter {
+++  id         String   @id @default(uuid())
+++  unidade_id String
+++  nome       String   @db.VarChar(120)
+++  descricao  String?  @db.Text
+++  ativo      Boolean  @default(true)
+++  created_at DateTime @default(now())
+++  updated_at DateTime @updatedAt
+++
+++  unit  Unit       @relation(fields: [unidade_id], references: [id])
+++  items CostItem[]
+++
+++  @@map("cost_centers")
+++}
+++
+++model CostItem {
+++  id             String    @id @default(uuid())
+++  cost_center_id String
+++  unidade_id     String
+++  nome           String    @db.VarChar(120)
+++  tipo           TipoCusto
+++  valor_centavos Int?
+++  percentual_bps Int?
+++  descricao      String?   @db.Text
+++  ativo          Boolean   @default(true)
+++  created_at     DateTime  @default(now())
+++  updated_at     DateTime  @updatedAt
+++
+++  cost_center CostCenter @relation(fields: [cost_center_id], references: [id])
+++  unit        Unit       @relation(fields: [unidade_id], references: [id])
+++
+++  @@map("cost_items")
+++}
++diff --git a/apps/api/src/app.module.ts b/apps/api/src/app.module.ts
++index 4bbff46..81a8d20 100644
++--- a/apps/api/src/app.module.ts
+++++ b/apps/api/src/app.module.ts
++@@ -10,6 +10,8 @@ import { CompanySettingsModule } from './modules/company-settings/company-settin
++ import { UnitsModule } from './modules/units/units.module';
++ import { BrandsModule } from './modules/brands/brands.module';
++ import { CategoriesModule } from './modules/categories/categories.module';
+++import { SuppliersModule } from './modules/suppliers/suppliers.module';
+++import { CostCenterModule } from './modules/cost-center/cost-center.module';
++ import { TenancyModule } from './common/tenancy/tenancy.module';
++ import { JwtSystemGuard } from './common/auth/guards/jwt-system.guard';
++ import { RolesGuard } from './common/auth/guards/roles.guard';
++@@ -27,6 +29,8 @@ import { RolesGuard } from './common/auth/guards/roles.guard';
++     UnitsModule,
++     BrandsModule,
++     CategoriesModule,
+++    SuppliersModule,
+++    CostCenterModule,
++   ],
++   providers: [
++     { provide: APP_GUARD, useClass: ThrottlerGuard },
++apps/api/src/modules/cost-center/cost-center.controller.ts
++apps/api/src/modules/cost-center/cost-center.module.ts
++apps/api/src/modules/cost-center/cost-center.repository.ts
++apps/api/src/modules/cost-center/cost-center.service.ts
++apps/api/src/modules/cost-center/dto/create-cost-center.dto.ts
++apps/api/src/modules/cost-center/dto/create-cost-item.dto.ts
++apps/api/src/modules/cost-center/dto/list-cost-centers.dto.ts
++apps/api/src/modules/cost-center/dto/update-cost-center.dto.ts
++apps/api/src/modules/cost-center/dto/update-cost-item.dto.ts
++apps/api/src/modules/suppliers/dto/create-supplier-address.dto.ts
++apps/api/src/modules/suppliers/dto/create-supplier-contact.dto.ts
++apps/api/src/modules/suppliers/dto/create-supplier.dto.ts
++apps/api/src/modules/suppliers/dto/link-brands.dto.ts
++apps/api/src/modules/suppliers/dto/list-suppliers.dto.ts
++apps/api/src/modules/suppliers/dto/update-supplier-address.dto.ts
++apps/api/src/modules/suppliers/dto/update-supplier-contact.dto.ts
++apps/api/src/modules/suppliers/dto/update-supplier.dto.ts
++apps/api/src/modules/suppliers/suppliers.controller.ts
++apps/api/src/modules/suppliers/suppliers.module.ts
++apps/api/src/modules/suppliers/suppliers.repository.ts
++apps/api/src/modules/suppliers/suppliers.service.ts
+diff --git a/docs/specs/feat-5-fornecedores-centro-custo/pre-pr-report.md b/docs/specs/feat-5-fornecedores-centro-custo/pre-pr-report.md
+new file mode 100644
+index 0000000..5839319
+--- /dev/null
++++ b/docs/specs/feat-5-fornecedores-centro-custo/pre-pr-report.md
+@@ -0,0 +1,73 @@
++# Pre-PR Review Report — feat-5-fornecedores-centro-custo
++
++**Data:** 2026-06-16  
++**Revisor:** revisor-erp  
++**Status geral:** 🟡 (bloqueio médio + avisos — sem crítico grave, mas há um bug de tenancy real)
++
++---
++
++## Crítico (precisa corrigir)
++
++### 1. Tenancy bypass em `deactivate` de fornecedor — `suppliers.service.ts` linha 146
++
++`deactivate` chama `this.repository.countNFLinks(id)` sem passar `unitId`, e o próprio `countNFLinks` está com corpo stub `return 0`. Isso é um placeholder aceitável enquanto o módulo NF não existe, **mas o maior problema é que `this.repository.deactivate(id)` (linha 153) executa `UPDATE suppliers SET active = false WHERE id = $1` sem nenhum filtro de `unidade_id`**. Um ADMINISTRADOR de uma unidade pode desativar um fornecedor de outra unidade se souber o UUID. A chamada `await this.findById(id, user)` logo acima retorna 404 se o fornecedor não pertencer à unidade — isso funciona como barreira hoje, mas apenas porque `findById` usa `findFirst`. Se o guard falhar por qualquer motivo (bug futuro, mudança de implementação do `findFirst`), o `deactivate` no repositório não tem a proteção em profundidade. Corrija `repository.deactivate` para `WHERE id = $1 AND unidade_id = $2`, recebendo `unitId` como segundo parâmetro e repassando-o do service.
++
++**Arquivo:** `apps/api/src/modules/suppliers/suppliers.repository.ts:99`  
++**Arquivo:** `apps/api/src/modules/suppliers/suppliers.service.ts:143-153`
++
++### 2. Hard-delete físico em `deleteAddress` e `deleteContact` sem checagem de cascata
++
++`repository.deleteAddress` e `repository.deleteContact` executam `prisma.supplierAddress.delete` / `prisma.supplierContact.delete` — deleção física sem soft-delete. O schema não tem `deleted_at` nesses modelos, o que é intencional; o problema é que não há nenhuma checagem de referências antes. Mais importante: o `deactivate` do supplier (soft-delete) não impede que endereços e contatos de um fornecedor inativo continuem sendo manipulados — qualquer chamada `POST /:id/addresses` com um `id` de fornecedor desativado vai funcionar normalmente, pois `findById` retorna fornecedores inativos (sem filtro por `active`). Defina se o comportamento desejado é bloquear operações de sub-recursos em fornecedores inativos ou não, e implemente de forma explícita.
++
++**Arquivo:** `apps/api/src/modules/suppliers/suppliers.service.ts:163` (addAddress sem checar `supplier.active`)
++
++---
++
++## Aviso (deveria corrigir)
++
++### 3. `RolesGuard` permite acesso sem `@Roles` — RBAC silencioso
++
++Em `roles.guard.ts` linha 17: `if (!requiredRoles?.length) return true`. Isso significa que qualquer rota **sem** `@Roles(...)` passa pelo guard de RBAC sem qualquer checagem de role, exigindo apenas autenticação JWT. Hoje todas as rotas dos dois módulos têm `@Roles`, então não há brecha atual. O risco é que rotas futuras adicionadas sem o decorator ficam abertas a qualquer usuário autenticado do sistema. Considere inverter o padrão: sem `@Roles` explícito, negar por default (DENY_BY_DEFAULT) e exigir um decorator `@AllRoles()` para rotas que qualquer role pode acessar.
++
++**Arquivo:** `apps/api/src/common/auth/guards/roles.guard.ts:17`
++
++### 4. `validateItemTypeConstraints` aceita `valor_centavos = 0` como válido em VARIAVEL
++
++Em `cost-center.service.ts` linha 213: `if (valor_centavos != null)` — se o cliente enviar `valor_centavos: 0`, essa condição passa `!= null` (0 != null é true) e lança 422. Isso é correto. Porém na verificação FIXO (linha 195): `if (!valor_centavos || valor_centavos < 1)` — `!valor_centavos` é true quando o valor é `0`, o que também está correto. A lógica está consistente, mas o DTO tem `@Min(1)` em `valor_centavos` e `percentual_bps`, então o valor 0 já é rejeitado antes de chegar ao service. Isso é redundante mas inofensivo. O aviso real é: ao fazer `updateItem`, se o cliente enviar apenas `{ tipo: 'FIXO' }` sem `valor_centavos`, o `resolvedValor` vira `item.valor_centavos ?? undefined`. Se o item VARIAVEL existente não tem `valor_centavos`, o `resolvedValor` será `undefined`, e `validateItemTypeConstraints(FIXO, undefined, ...)` vai lançar 422 corretamente — porém a mensagem de erro não deixa claro que o campo precisa ser enviado na mesma requisição de mudança de tipo. Apenas uma questão de UX/doc.
++
++**Arquivo:** `apps/api/src/modules/cost-center/cost-center.service.ts:138-143`
++
++### 5. `linkBrands` itera marcas com `await` em loop — N queries sequenciais
++
++`suppliers.service.ts` linha 249: `for (const brandId of brandIds) { await this.repository.linkBrand(id, brandId); }`. O `linkBrand` usa `upsert`, então é idempotente e correto. O problema é eficiência: N chamadas sequenciais ao banco para vincular N marcas. Use `Promise.all(brandIds.map(...))` para execução paralela, ou um único `createMany` com `skipDuplicates: true`.
++
++**Arquivo:** `apps/api/src/modules/suppliers/suppliers.service.ts:249`
++
++---
++
++## Sugestão (bom ter)
++
++### 6. `countNFLinks` stub sempre retorna 0
++
++`suppliers.repository.ts:172` — o TODO está documentado, mas isso significa que o soft-delete do fornecedor **nunca** vai retornar 409 hoje. Quando o módulo NF for implementado, é fácil esquecer de substituir. Considere lançar um `NotImplementedException` comentado ou adicionar um aviso no log para forçar revisão quando o módulo NF for integrado.
++
++### 7. `findByDocument` no service faz dois roundtrips ao banco
++
++`suppliers.service.ts:87-93` — busca por documento retorna apenas `Supplier` (sem includes), e então faz um segundo `findById` para obter o `SupplierFull`. Poderia ser encapsulado num único método `findFullByDocument(document, unitId)` no repositório.
++
++### 8. Schema: `CostItem.unidade_id` sem índice explícito
++
++`prisma/schema.prisma:346` — `CostItem` tem `unidade_id` como FK e é usado em `getActiveItems(unitId)` com `WHERE unidade_id = $1`. Sem `@@index([unidade_id])` no schema, o Prisma não cria índice. Com volume de itens, essa query de summary vai sofrer. Adicione `@@index([unidade_id])` e `@@index([cost_center_id])` ao modelo `CostItem`.
++
++---
++
++## O que está correto
++
++- **Tenancy nas queries principais:** todas as operações de leitura e escrita no repository recebem `unitId` e aplicam `WHERE unidade_id = $1`. O `TenancyService.resolveUnitId` extrai o escopo do JWT, nunca de parâmetro de client.
++- **CNPJ/CPF:** `validateCnpjCpf` implementa módulo-11 completo com rejeição de sequências repetidas. É chamado no `create` e no `update` antes de qualquer persistência. Documento armazenado apenas com dígitos.
++- **Valores monetários:** `valor_centavos` e `percentual_bps` são `Int?` no schema Prisma — sem float em nenhum campo. DTOs decorados com `@IsInt()`. Cálculo do summary usa soma de inteiros.
++- **Mutual exclusivity FIXO/VARIAVEL:** `validateItemTypeConstraints` cobre os quatro casos (FIXO sem valor, FIXO com percentual, VARIAVEL sem percentual, VARIAVEL com valor) e é chamado tanto no `addItem` quanto no `updateItem`.
++- **Soft-delete:** fornecedor usa `active = false`; centro de custo usa `ativo = false`; itens usam `ativo = false`. Nenhuma deleção física de entidades principais.
++- **Rotas estáticas antes de paramétrica:** `GET /suppliers/by-document/:document` está declarada antes de `GET /suppliers/:id` no controller. `GET /cost-centers/summary` está declarada antes de `GET /cost-centers/:id`.
++- **RBAC:** todas as rotas têm `@Roles(...)` explícito. Auth e roles guards são globais via `APP_GUARD`. Nenhum `@Public()` acidental nos dois módulos.
++- **Separação de camadas:** controller sem lógica de negócio; service orquestra regras; repository concentra queries Prisma.
+diff --git a/docs/specs/feat-5-fornecedores-centro-custo/suppliers-done.txt b/docs/specs/feat-5-fornecedores-centro-custo/suppliers-done.txt
+new file mode 100644
+index 0000000..45bcce2
+--- /dev/null
++++ b/docs/specs/feat-5-fornecedores-centro-custo/suppliers-done.txt
+@@ -0,0 +1,2 @@
++Module suppliers implemented: controller (15 endpoints), service (business rules with CNPJ/CPF validation, tenancy scoping), repository (Prisma, full includes), 8 DTOs with class-validator. Prisma schema extended with Supplier, SupplierAddress, SupplierContact, SupplierBrand models and relations on Unit/Brand; prisma generate ran successfully.
++TODOs: (1) run `pnpm --filter @zk/api prisma:migrate` to create the migration and apply to DB; (2) register SuppliersModule in AppModule imports; (3) implement countNFLinks in repository when NF module exists; (4) add logo upload/removal endpoints when storage module is ready.
+diff --git a/docs/specs/feat-7-produtos/diff.patch b/docs/specs/feat-7-produtos/diff.patch
+new file mode 100644
+index 0000000..f7a0b64
+--- /dev/null
++++ b/docs/specs/feat-7-produtos/diff.patch
+@@ -0,0 +1,187 @@
++diff --git a/apps/api/prisma/schema.prisma b/apps/api/prisma/schema.prisma
++index ef3edc7..8c7209d 100644
++--- a/apps/api/prisma/schema.prisma
+++++ b/apps/api/prisma/schema.prisma
++@@ -163,6 +163,7 @@ model Unit {
++   config           UnitConfig?
++   brands           Brand[]
++   categories       Category[]
+++  products         Product[]      @relation("UnitProducts")
++ 
++   // DB-level: partial unique index on (company_settings_id) WHERE tipo = 'MATRIZ' AND ativa = true
++   // Applied via raw migration: CREATE UNIQUE INDEX idx_one_matriz ON units (company_settings_id) WHERE tipo = 'MATRIZ' AND ativa = true;
++@@ -212,7 +213,8 @@ model Brand {
++   created_at       DateTime @default(now())
++   updated_at       DateTime @updatedAt
++ 
++-  unit Unit @relation(fields: [unidade_id], references: [id])
+++  unit     Unit      @relation(fields: [unidade_id], references: [id])
+++  products Product[]
++ 
++   @@unique([unidade_id, slug])
++   @@map("brands")
++@@ -237,6 +239,131 @@ model Category {
++   unit     Unit       @relation(fields: [unidade_id], references: [id])
++   parent   Category?  @relation("CategoryChildren", fields: [parent_id], references: [id])
++   children Category[] @relation("CategoryChildren")
+++  products Product[]
++ 
++   @@map("categories")
++ }
+++
+++// ─── Módulo 7: Produtos ───────────────────────────────────────────────────────
+++
+++enum MediaType {
+++  IMAGE
+++  VIDEO
+++}
+++
+++model Product {
+++  id                String   @id @default(uuid())
+++  unidade_id        String
+++  category_id       String?
+++  brand_id          String?
+++  name              String   @db.VarChar(300)
+++  slug              String   @db.VarChar(320)
+++  sku               String?  @db.VarChar(100)
+++  barcode           String?  @db.VarChar(50)
+++  description       String?  @db.Text
+++  short_description String?  @db.VarChar(500)
+++  unit              String   @default("UN") @db.VarChar(10)
+++  active            Boolean  @default(true)
+++  featured          Boolean  @default(false)
+++  min_stock         Int      @default(0)
+++  created_at        DateTime @default(now())
+++  updated_at        DateTime @updatedAt
+++
+++  unit_rel  Unit      @relation("UnitProducts", fields: [unidade_id], references: [id])
+++  category  Category? @relation(fields: [category_id], references: [id])
+++  brand     Brand?    @relation(fields: [brand_id], references: [id])
+++  pricing   ProductPricing?
+++  media     ProductMedia[]
+++  delivery  ProductDelivery?
+++  fiscal    ProductFiscal?
+++  seo       ProductSeo?
+++
+++  @@unique([unidade_id, slug])
+++  @@unique([unidade_id, sku])
+++  @@unique([unidade_id, barcode])
+++  @@map("products")
+++}
+++
+++model ProductPricing {
+++  id                      String    @id @default(uuid())
+++  product_id              String    @unique
+++  cost_price_cents        Int       @default(0)
+++  sale_price_cents        Int       @default(0)
+++  promotional_price_cents Int?
+++  promotional_starts_at   DateTime?
+++  promotional_ends_at     DateTime?
+++  discount_enabled        Boolean   @default(false)
+++  max_discount_pct        Decimal?  @db.Decimal(5, 2)
+++  margin_pct              Decimal?  @db.Decimal(8, 4)
+++  margin_cents            Int?
+++
+++  product Product @relation(fields: [product_id], references: [id])
+++
+++  @@map("product_pricing")
+++}
+++
+++model ProductMedia {
+++  id          String    @id @default(uuid())
+++  product_id  String
+++  storage_key String    @db.VarChar(512)
+++  url         String    @db.VarChar(512)
+++  media_type  MediaType
+++  alt_text    String?   @db.VarChar(255)
+++  sort_order  Int       @default(0)
+++  created_at  DateTime  @default(now())
+++
+++  product Product @relation(fields: [product_id], references: [id])
+++
+++  @@map("product_media")
+++}
+++
+++model ProductDelivery {
+++  id               String   @id @default(uuid())
+++  product_id       String   @unique
+++  weight_grams     Int?
+++  height_cm        Decimal? @db.Decimal(8, 2)
+++  width_cm         Decimal? @db.Decimal(8, 2)
+++  depth_cm         Decimal? @db.Decimal(8, 2)
+++  free_shipping    Boolean  @default(false)
+++  ships_from_store Boolean  @default(true)
+++
+++  product Product @relation(fields: [product_id], references: [id])
+++
+++  @@map("product_delivery")
+++}
+++
+++model ProductFiscal {
+++  id              String   @id @default(uuid())
+++  product_id      String   @unique
+++  ncm             String?  @db.VarChar(8)
+++  cfop            String?  @db.VarChar(5)
+++  cest            String?  @db.VarChar(7)
+++  origem          Int?
+++  cst_icms        String?  @db.VarChar(3)
+++  csosn           String?  @db.VarChar(3)
+++  cst_pis         String?  @db.VarChar(2)
+++  cst_cofins      String?  @db.VarChar(2)
+++  cst_ipi         String?  @db.VarChar(2)
+++  aliquota_icms   Decimal? @db.Decimal(5, 2)
+++  aliquota_pis    Decimal? @db.Decimal(5, 2)
+++  aliquota_cofins Decimal? @db.Decimal(5, 2)
+++  aliquota_ipi    Decimal? @db.Decimal(5, 2)
+++
+++  product Product @relation(fields: [product_id], references: [id])
+++
+++  @@map("product_fiscal")
+++}
+++
+++model ProductSeo {
+++  id                      String    @id @default(uuid())
+++  product_id              String    @unique
+++  seo_title               String?   @db.VarChar(70)
+++  seo_description         String?   @db.VarChar(160)
+++  seo_keywords            String[]
+++  schema_org_json         Json?
+++  schema_org_generated_at DateTime?
+++
+++  product Product @relation(fields: [product_id], references: [id])
+++
+++  @@map("product_seo")
+++}
++diff --git a/apps/api/src/app.module.ts b/apps/api/src/app.module.ts
++index 4bbff46..7439c1a 100644
++--- a/apps/api/src/app.module.ts
+++++ b/apps/api/src/app.module.ts
++@@ -10,6 +10,7 @@ import { CompanySettingsModule } from './modules/company-settings/company-settin
++ import { UnitsModule } from './modules/units/units.module';
++ import { BrandsModule } from './modules/brands/brands.module';
++ import { CategoriesModule } from './modules/categories/categories.module';
+++import { ProductsModule } from './modules/products/products.module';
++ import { TenancyModule } from './common/tenancy/tenancy.module';
++ import { JwtSystemGuard } from './common/auth/guards/jwt-system.guard';
++ import { RolesGuard } from './common/auth/guards/roles.guard';
++@@ -27,6 +28,7 @@ import { RolesGuard } from './common/auth/guards/roles.guard';
++     UnitsModule,
++     BrandsModule,
++     CategoriesModule,
+++    ProductsModule,
++   ],
++   providers: [
++     { provide: APP_GUARD, useClass: ThrottlerGuard },
++apps/api/src/modules/products/dto/create-product.dto.ts
++apps/api/src/modules/products/dto/list-products.dto.ts
++apps/api/src/modules/products/dto/reorder-media.dto.ts
++apps/api/src/modules/products/dto/simulate-pricing.dto.ts
++apps/api/src/modules/products/dto/update-product-delivery.dto.ts
++apps/api/src/modules/products/dto/update-product.dto.ts
++apps/api/src/modules/products/dto/update-product-fiscal.dto.ts
++apps/api/src/modules/products/dto/update-product-pricing.dto.ts
++apps/api/src/modules/products/dto/update-product-seo.dto.ts
++apps/api/src/modules/products/products.controller.ts
++apps/api/src/modules/products/products.module.ts
++apps/api/src/modules/products/products.repository.ts
++apps/api/src/modules/products/products.service.ts
+diff --git a/docs/specs/feat-7-produtos/pre-pr-report.md b/docs/specs/feat-7-produtos/pre-pr-report.md
+new file mode 100644
+index 0000000..f1143da
+--- /dev/null
++++ b/docs/specs/feat-7-produtos/pre-pr-report.md
+@@ -0,0 +1,149 @@
++# Pre-PR Review Report — Módulo 7: Produtos
++
++**Status: AMARELO (bloqueio médio + avisos)**
++
++---
++
++## CRITICO — Precisa corrigir antes do merge
++
++### C1 · Repository `update` e `deactivate` sem `unidade_id` no `where` (Tenancy)
++
++**Arquivo:** `apps/api/src/modules/products/products.repository.ts`, linhas 101–113
++
++```ts
++// update — line 101
++update(id: string, data: Prisma.ProductUpdateInput) {
++  return this.prisma.product.update({
++    where: { id },   // ← sem unidade_id
++    data,
++    ...
++  });
++}
++
++// deactivate — line 108
++deactivate(id: string) {
++  return this.prisma.product.update({
++    where: { id },   // ← sem unidade_id
++    data: { active: false },
++  });
++}
++```
++
++**Risco:** Mesmo que o service chame `findById(id, unitId)` antes, existe uma janela de TOCTOU: um produto de outra unidade com o mesmo UUID poderia ser mutado se o guard de tenancy falhar ou se o método for reutilizado sem o check prévio. A convenção do projeto (invariante de tenancy) exige que **todo** `update`/`delete` no repositório inclua `unidade_id` no `where` — não apenas o `find`. Corrija adicionando `unitId` como parâmetro e inclua no `where`.
++
++Também afeta: `updatePricing`, `updateDelivery`, `updateFiscal`, `updateSeo` — todos usam `where: { product_id: productId }` sem `unidade_id`. Isso é menos grave porque `product_id` é UUID único global, mas viola a convenção de defesa em profundidade.
++
++---
++
++### C2 · `countLoteLinks` sempre retorna 0 — guarda de soft-delete está desativada
++
++**Arquivo:** `apps/api/src/modules/products/products.repository.ts`, linhas 174–179
++
++```ts
++countLoteLinks(id: string): Promise<number> {
++  // TODO: implement when Lotes module (4) exists ...
++  void id;
++  return Promise.resolve(0);  // ← proteção nunca dispara
++}
++```
++
++**Risco:** `service.deactivate` checa `loteLinks > 0` antes de desativar, mas o método stub nunca retorna > 0. A lógica de proteção **parece** correta mas é ineficaz. Quando o módulo 4 existir, o desenvolvedor pode não lembrar de voltar aqui. Isso não é um "aviso futuro" — é um contrato quebrado hoje: o endpoint `DELETE /products/:id` promete no Swagger "Falha com 409 se o produto possuir lotes vinculados" mas nunca falha.
++
++**Ação imediata:** Ou remove a promessa do Swagger e do service até o módulo 4 estar pronto, ou documenta de forma explícita que o guard está desativado (e rastreia via issue).
++
++---
++
++## AVISO — Deveria corrigir
++
++### A1 · `simulatePricing` retorna `margin_pct` como `float` JavaScript
++
++**Arquivo:** `apps/api/src/modules/products/products.service.ts`, linha 205
++
++```ts
++margin_pct: parseFloat(margin_pct.toFixed(4)),
++```
++
++No `updatePricing` (linha 192) a margem é corretamente armazenada como `new Prisma.Decimal(margin_pct.toFixed(4))`. Mas no `simulatePricing` o retorno usa `parseFloat`, que é um `number` JavaScript (IEEE 754 float). Embora não persista, a resposta da API expõe um float para o cliente, inconsistente com o invariante de "nunca float para dinheiro/percentual" e pode causar diferença nos cálculos frontend vs backend.
++
++**Correção:** Retorne como string com precisão fixa: `margin_pct: Number(margin_pct.toFixed(4))` já é melhor, mas o ideal é retornar como string `"xx.xxxx"` ou documento no Swagger que é Decimal(8,4).
++
++---
++
++### A2 · `UpdateProductPricingDto.max_discount_pct` decorado como `@IsNumber()` sem `@IsDecimal` — risco de float no input
++
++**Arquivo:** `apps/api/src/modules/products/dto/update-product-pricing.dto.ts`, linha 39
++
++`max_discount_pct?: number` recebe `@IsNumber()`, o que aceita `12.3456789...` (float). No schema Prisma está como `Decimal(5,2)`. Não há validação de casas decimais no DTO: um cliente que envie `12.123456` terá o valor silenciosamente truncado pelo Prisma.
++
++**Correção:** Adicione `@IsDecimal({ decimal_digits: '0,2' })` ou `@Max`/`@Min` com `@IsNumber({ maxDecimalPlaces: 2 })`.
++
++Mesmo problema nas alíquotas fiscais em `UpdateProductFiscalDto` (linhas 79–105): `aliquota_icms`, `aliquota_pis`, etc. são `@IsNumber()` sem restrição de casas decimais.
++
++---
++
++### A3 · Rota `POST :id/pricing/simulate` aparece ANTES de `PATCH :id/pricing` no controller — OK
++
++**Confirmado correto** — linha 84 antes da linha 97. Sem problema aqui.
++
++---
++
++### A4 · Rota `PATCH :id/media/reorder` aparece DEPOIS de `POST :id/media` — risco de conflito em Express/Fastify
++
++**Arquivo:** `apps/api/src/modules/products/products.controller.ts`, linhas 162–185
++
++`POST :id/media` (linha 162) antes de `PATCH :id/media/reorder` (linha 177). São verbos diferentes então não há ambiguidade de routing no caso atual. Porém a convenção do projeto (e o checklist passado) exige static routes antes de param routes. Reordenar para colocar `PATCH :id/media/reorder` antes de `POST :id/media` elimina qualquer dúvida futura, especialmente se o método do `addMedia` mudar para PATCH.
++
++---
++
++### A5 · `ProductsModule` não importa `TenancyModule`
++
++**Arquivo:** `apps/api/src/modules/products/products.module.ts`
++
++`TenancyService` é injetado em `ProductsService` mas `TenancyModule` não está nos `imports` do módulo. Funciona agora porque `TenancyModule` é `@Global()` (confirmado), mas se o escopo global for removido no futuro o módulo quebra silenciosamente. **Boa prática:** declare a dependência explicitamente com `imports: [TenancyModule]`.
++
++---
++
++## SUGESTAO — Bom ter
++
++### S1 · `@@unique([unidade_id, sku])` com `sku` nullable pode gerar colisão inesperada
++
++**Arquivo:** `apps/api/prisma/schema.prisma`, linha 282
++
++No PostgreSQL, `UNIQUE` em coluna nullable trata cada `NULL` como distinto, então múltiplos produtos com `sku = NULL` são permitidos — correto. Porém o `findBySku` no repository usa `findFirst` (não `findUnique`) o que é consistente. Nenhum bug, mas vale comentar no schema para futuros devs.
++
++### S2 · Slug collision loop em `update` pode ser infinito em edge case extremo
++
++**Arquivo:** `apps/api/src/modules/products/products.service.ts`, linhas 138–144
++
++O loop `while(true)` incrementa `suffix` mas não tem limite de iterações. Em produção com milhares de produtos com nomes similares o loop pode demorar. Adicione um limite (ex: 99) e lance erro amigável.
++
++### S3 · `addMedia` em `service` não é acessível via controller — dead code
++
++**Arquivo:** `apps/api/src/modules/products/products.service.ts`, linhas 245–265
++
++O método `addMedia` no service tem lógica completa (calcula `maxOrder`, etc.) mas o controller stub em `POST :id/media` (linha 162) **nunca o chama** — retorna mensagem fixa sem invocar o service. O código de `addMedia` no service ficará órfão até o módulo 25 (Storage) ser implementado. Não é bug, mas é confuso. Considere mover essa lógica para um TODO comment ou criar um issue rastreável.
++
++---
++
++## Resumo dos invariantes verificados
++
++| Invariante | Status |
++|---|---|
++| Tenancy — `findAll`, `findById`, `findBySku`, `findBySlug`, `findByBarcode` | OK |
++| Tenancy — `update`, `deactivate` (repository) | **FALHA — C1** |
++| Monetary — schema usa `Int` para cents e `Decimal` para pct | OK |
++| Monetary — `float` em `simulatePricing` response | Aviso — A1 |
++| Margin recalc em `updatePricing` | OK |
++| Simulate no-persist | OK |
++| SEO generate retorna 202 | OK |
++| CST/CSOSN mutual exclusion | OK |
++| Soft-delete guard (`countLoteLinks`) | **STUB INATIVO — C2** |
++| RBAC `@Roles(SystemRole.ADMINISTRADOR)` na classe | OK |
++| Nenhuma rota `@Public()` | OK |
++| Route ordering `simulate` before `updatePricing` | OK |
++| Route ordering media static before param | Aviso menor — A4 |
++| Controller sem regra de negócio | OK |
++| Service sem HTTP | OK |
++| Repository concentra dados | OK |
++| Swagger documentado em todos endpoints | OK |
++| SEO generation não bloqueia (fila) | OK (TODO comentado) |
+diff --git a/docs/specs/feat-7-produtos/products-done.txt b/docs/specs/feat-7-produtos/products-done.txt
+new file mode 100644
+index 0000000..9e73154
+--- /dev/null
++++ b/docs/specs/feat-7-produtos/products-done.txt
+@@ -0,0 +1,3 @@
++Module 7 (products) implemented: schema (Product + ProductPricing + ProductDelivery + ProductFiscal + ProductSeo + ProductMedia + MediaType enum), repository, service, controller, 9 DTOs, ProductsModule registered in AppModule.
++TypeScript check: 0 errors. ESLint not configured in project (no .eslintrc / eslint.config.js found — eslint binary also absent from local install).
++TODOs: (1) prisma:migrate to create tables; (2) Storage module (25) for media upload endpoint; (3) RabbitMQ publish in enqueueSeoGeneration when IA module (27) exists; (4) countLoteLinks in repository when StockLot model (module 4) is added.
+diff --git a/docs/specs/feat-9-lotes-engine-precificacao/build-summary.md b/docs/specs/feat-9-lotes-engine-precificacao/build-summary.md
+new file mode 100644
+index 0000000..2d58843
+--- /dev/null
++++ b/docs/specs/feat-9-lotes-engine-precificacao/build-summary.md
+@@ -0,0 +1,11 @@
++# Build Summary — feat-9: Lotes + Engine de Precificação
++
++Implementados os módulos 4 (Lotes) e 9 (PricingEngine) na API NestJS conforme spec, seguindo o padrão Controller → Service → Repository do projeto.
++
++**Módulo Lots** (`apps/api/src/modules/lots/`): CRUD completo com 7 endpoints protegidos por RBAC (ADMINISTRADOR e OPERADOR_ESTOQUE_COMPRAS); listagem paginada com filtros; rota FIFO por produto (`GET /lots/by-product/:productId`); rota de vencimento (`GET /lots/expiring?days=N`); regras de imutabilidade de `product_id` e `quantity_received` enforçadas no service; saldo retornado como stub 0 (aguarda módulo 5 de movimentações); soft-delete com guarda de saldo; unicidade `(unidade_id, product_id, code)` com 409 em duplicata. O stub `countLoteLinks` em `products.repository.ts` foi atualizado para consultar a tabela `lots` real.
++
++**Módulo PricingEngine** (`apps/api/src/modules/pricing-engine/`): serviço puro de cálculo sem banco/repository; aritmética 100% inteira (centavos e basis points, com `Math.floor` nas parcelas e `Math.ceil` no preço sugerido); `POST /pricing-engine/calculate` com roles ADMINISTRADOR e OPERADOR_PDV; módulo exporta `PricingEngineService` para injeção em Produtos e PDV.
++
++**Schema Prisma**: model `Lot` adicionado com back-relations em `Unit` e `Product`; `prisma generate` executado com sucesso; `tsc --noEmit` sem erros.
++
++**TODOs pendentes**: (1) Criar e aplicar migration Prisma para a tabela `lots` (`pnpm --filter @zk/api prisma:migrate`). (2) Substituir o stub `getBalance` em `LotsRepository` pela query real em `stock_movements` quando o módulo 5 for implementado.
+diff --git a/docs/specs/feat-9-lotes-engine-precificacao/diff.patch b/docs/specs/feat-9-lotes-engine-precificacao/diff.patch
+new file mode 100644
+index 0000000..e69de29
+diff --git a/docs/specs/feat-empresa-unidades/context.md b/docs/specs/feat-empresa-unidades/context.md
+new file mode 100644
+index 0000000..ed7e0a9
+--- /dev/null
++++ b/docs/specs/feat-empresa-unidades/context.md
+@@ -0,0 +1,143 @@
++# Context: Empresa (módulo 14) + Unidades/Lojas (módulo 15)
++
++**Domínio:** Plataforma & Gestão | **Prioridade:** P0  
++**Paths NestJS:** `apps/api/src/modules/company-settings/` e `apps/api/src/modules/units/`
++
++---
++
++## Entidades e Campos Principais
++
++### CompanySettings (singleton — exatamente 1 registro)
++| Campo | Tipo | Notas |
++|-------|------|-------|
++| `id` | uuid | PK |
++| `razao_social` | varchar(255) | Obrigatório |
++| `nome_fantasia` | varchar(255) | Opcional |
++| `cnpj_cpf` | varchar(14) | Só dígitos; único; validado por dígito verificador |
++| `tipo_documento` | enum(CNPJ, CPF) | Explícito |
++| `inscricao_estadual` | varchar(20) | Opcional, só dígitos |
++| `regime_tributario` | enum(SIMPLES, LUCRO_PRESUMIDO, LUCRO_REAL) | Obrigatório; alimenta engine fiscal |
++| `logo_url` | varchar(500) | URL no S3/R2; upload via módulo Storage |
++| `dpo_email` | varchar(255) | Obrigatório para conformidade LGPD |
++
++### CompanyEmail
++Tipos: `COMERCIAL`, `FINANCEIRO`, `SUPORTE`, `NFE`, `DPO`, `OUTRO`. Um `principal = true` por empresa. Ao menos um com `tipo = DPO` deve existir sempre.
++
++### CompanyPhone
++Tipos: `COMERCIAL`, `FINANCEIRO`, `SUPORTE`, `WHATSAPP`, `OUTRO`. Um `principal = true` por empresa. `ddi` default `+55`; `numero` só dígitos.
++
++### CompanyAddress
++Tipos: `MATRIZ`, `CORRESPONDENCIA`, `COBRANCA`. Endereço de MATRIZ deve existir sempre. Filiais são tratadas no módulo 15.
++
++---
++
++### Unit
++| Campo | Tipo | Notas |
++|-------|------|-------|
++| `id` | uuid | PK |
++| `company_settings_id` | uuid | FK → CompanySettings |
++| `nome` | varchar(255) | Ex: "Matriz", "Loja Centro" |
++| `slug` | varchar(100) | Auto-gerado; único |
++| `tipo` | enum(MATRIZ, FILIAL, PONTO_DE_VENDA_MOVEL) | Só uma MATRIZ permitida |
++| `cnpj_inscricao` | varchar(20) | CNPJ da filial; opcional |
++| `ativa` | boolean | Default true; soft delete apenas |
++| `permite_venda_offline` | boolean | Habilita PDV offline nesta unidade |
++
++### UnitAddress
++Endereço físico da unidade: logradouro, numero, bairro, municipio, uf, cep (só dígitos), codigo_ibge.
++
++### UnitConfig (1:1 com Unit)
++| Campo | Notas |
++|-------|-------|
++| `estoque_proprio` | `false` = compartilha estoque da MATRIZ |
++| `caixa_proprio` | `true` = fechamento de caixa separado |
++| `gateway_pdv_override_id` | FK → PaymentProviderConfig; sobrescreve gateway padrão |
++| `timezone` | Default `America/Sao_Paulo` |
++
++---
++
++## Endpoints
++
++### CompanySettings — 15 endpoints (todos `JwtAuthGuard + Role('admin')`)
++| Método | Rota |
++|--------|------|
++| GET / PUT | `/company-settings` (upsert singleton) |
++| GET / POST / PUT /:id / DELETE /:id | `/company-settings/emails` |
++| GET / POST / PUT /:id / DELETE /:id | `/company-settings/phones` |
++| GET / POST / PUT /:id / DELETE /:id | `/company-settings/addresses` |
++| POST | `/company-settings/logo` |
++
++### Units — 8 endpoints (todos `JwtAuthGuard + Role('admin')`)
++| Método | Rota |
++|--------|------|
++| GET | `/units` (paginado; `?includeInactive=true` para inativas) |
++| GET | `/units/:id` |
++| POST | `/units` |
++| PUT | `/units/:id` |
++| PATCH | `/units/:id/deactivate` |
++| PUT | `/units/:id/address` |
++| GET / PUT | `/units/:id/config` |
++
++**Total: 23 endpoints**
++
++---
++
++## Regras de Negócio
++
++**Empresa:**
++- `CompanySettings` é singleton; `PUT /company-settings` faz upsert. Sem `POST` nem `DELETE` no recurso raiz.
++- CNPJ validado pelos dois dígitos verificadores (módulo 11); CPF idem. Rejeitar com `422` se inválido.
++- Armazenar CNPJ/CPF sem formatação; formatar apenas na saída.
++- Não permitir remover o único e-mail DPO nem o único endereço MATRIZ.
++- `regime_tributario` alimenta o módulo de Config. de Impostos (módulo 18).
++- Upload de logo delegado ao módulo Storage (módulo 25); só armazena a URL.
++
++**Unidades:**
++- Apenas uma unidade com `tipo = MATRIZ` pode existir (`409 Conflict` se tentar criar segunda).
++- `unidade_id` no token JWT do operador é imutável pelo próprio operador.
++- Desativar unidade: soft delete (`ativa = false`). Dados históricos preservados.
++- Não desativar unidade com caixa aberto ou sessão PDV ativa.
++- `estoque_proprio = false`: lógica de compartilhamento implementada no módulo Estoque (módulo 5).
++- Slug gerado automaticamente (lowercase, sem acentos, hífens); editável com validação de unicidade.
++
++---
++
++## Invariantes Críticos
++
++1. **CNPJ/CPF validado por dígito antes de qualquer INSERT/UPDATE.** Nunca persistir sem validação.
++2. **Escopo de tenancy via `unidade_id`.** Toda query de negócio (estoque, vendas, caixa, relatórios) filtra por `unidade_id` extraído do contexto autenticado — nunca de parâmetro do cliente. Implementado no repositório, não no controller.
++3. **Singleton de empresa + MATRIZ única de unidade.** `CompanySettings` tem exatamente 1 linha; `Unit` tem no máximo 1 com `tipo = MATRIZ` e `ativa = true`. Ambos garantidos por constraint de banco.
++4. **PII em repouso:** `cnpj_cpf`, `dpo_email` e contatos são PII empresarial — criptografar conforme `seguranca-lgpd`. DPO sempre presente (exigência LGPD).
++5. **Soft delete apenas em unidades.** Nunca `DELETE` físico de unidade com movimentação histórica.
++
++---
++
++## Dependências
++
++### Módulo 14 — CompanySettings
++- **Upstream:** Storage (módulo 25) para logo; skills `fiscal-br` e `seguranca-lgpd`.
++- **Downstream:** Unidades (módulo 15), Config. de Impostos (módulo 18), LGPD (módulo 22), Integração Fiscal (módulo 26), Notificações (módulo 20).
++
++### Módulo 15 — Units
++- **Upstream:** CompanySettings (módulo 14) via FK; Config. de Pagamentos (módulo 16) para override de gateway.
++- **Downstream:** **todos os módulos de negócio** (filtro universal por `unidade_id`), Estoque (módulo 5), PDV (módulo 11), Relatórios (módulo 21), Autenticação (módulo 23).
++
++---
++
++## Critérios de Aceite
++
++**Empresa:**
++- CNPJ/CPF inválido → `422` com mensagem descritiva.
++- CNPJ/CPF persistido sem formatação; retornado formatado na resposta.
++- Remoção do único endereço MATRIZ → erro descritivo.
++- Remoção do único e-mail DPO → erro descritivo.
++- Upload de logo salva URL, não binário no banco.
++- Todos os endpoints retornam `403` sem role `admin` e documentados no Swagger.
++
++**Unidades:**
++- Segunda unidade MATRIZ → `409 Conflict`.
++- `GET /units` retorna só ativas por padrão; `?includeInactive=true` retorna todas.
++- Desativar unidade com caixa aberto → erro descritivo.
++- Operador não acessa dados de unidade diferente da que está no seu token.
++- Queries de negócio sempre incluem `unidade_id` do contexto autenticado.
++- Todos os endpoints retornam `403` sem role `admin` e documentados no Swagger.
