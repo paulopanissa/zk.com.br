@@ -4,7 +4,8 @@ import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  // rawBody: true — necessário para validar assinaturas HMAC de webhooks (Uber Direct)
+  const app = await NestFactory.create(AppModule, { rawBody: true });
 
   // Global prefix /api — health is excluded (infra route, no version)
   app.setGlobalPrefix('api', {
