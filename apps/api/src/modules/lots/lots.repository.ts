@@ -143,11 +143,14 @@ export class LotsRepository {
 
   /**
    * Retorna o saldo disponível do lote derivado das movimentações de estoque.
-   * TODO: calcular via StockMovement quando módulo 5 (Estoque/Movimentações) for implementado.
-   * Substituir por: SELECT COALESCE(SUM(quantity),0) FROM stock_movements WHERE lot_id = $lotId
+   * Implementado após módulo 5 (Estoque): SUM(quantity) de stock_movements para o lote.
    */
-  async getBalance(_lotId: string): Promise<number> {
-    // Stub — módulo 5 ainda não existe no schema.
-    return 0;
+  async getBalance(lotId: string): Promise<number> {
+    const result = await this.prisma.$queryRaw<[{ total: string }]>`
+      SELECT COALESCE(SUM(quantity), 0)::text AS total
+      FROM stock_movements
+      WHERE lot_id = ${lotId}
+    `;
+    return parseFloat(result[0]?.total ?? '0');
   }
 }
