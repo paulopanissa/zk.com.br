@@ -174,6 +174,7 @@ model Unit {
   lgpd_requests            LgpdDataRequest[]          @relation("UnitLgpdRequests")
   nf_entradas              NfEntrada[]
   vendas                   Venda[]
+  coupons                  Coupon[]
 
   // DB-level: partial unique index on (company_settings_id) WHERE tipo = 'MATRIZ' AND ativa = true
   // Applied via raw migration: CREATE UNIQUE INDEX idx_one_matriz ON units (company_settings_id) WHERE tipo = 'MATRIZ' AND ativa = true;
@@ -411,6 +412,7 @@ model Product {
   stock_movements  StockMovement[]
   nf_entrada_items NfEntradaItem[]
   venda_items      VendaItem[]      @relation("ProductVendaItems")
+  coupons          Coupon[]         @relation("ProductCoupons")
 
   @@unique([unidade_id, slug])
   @@unique([unidade_id, sku])
@@ -1005,4 +1007,51 @@ model VendaPayment {
 
   @@index([venda_id])
   @@map("venda_payments")
+}
+
+// ─── Módulo 10: Cupons ────────────────────────────────────────────────────────
+
+enum CouponType {
+  FIXO
+  PERCENTUAL
+  FRETE_GRATIS
+}
+
+model Coupon {
+  id             String     @id @default(uuid())
+  unidade_id     String
+  code           String     @db.VarChar(50)
+  type           CouponType
+  value_centavos Int        @default(0)
+  percent_bps    Int        @default(0)
+  product_id     String?
+  description    String?    @db.VarChar(255)
+  active         Boolean    @default(true)
+  max_uses       Int?
+  uses_count     Int        @default(0)
+  valid_from     DateTime?
+  valid_until    DateTime?
+  created_by     String
+  created_at     DateTime   @default(now())
+  updated_at     DateTime   @updatedAt
+
+  unit    Unit          @relation(fields: [unidade_id], references: [id])
+  product Product?      @relation("ProductCoupons", fields: [product_id], references: [id])
+  usages  CouponUsage[]
+
+  @@unique([unidade_id, code])
+  @@index([unidade_id, active])
+  @@map("coupons")
+}
+
+model CouponUsage {
+  id         String   @id @default(uuid())
+  coupon_id  String
+  venda_id   String
+  created_at DateTime @default(now())
+
+  coupon Coupon @relation(fields: [coupon_id], references: [id], onDelete: Cascade)
+
+  @@unique([coupon_id, venda_id])
+  @@map("coupon_usages")
 }

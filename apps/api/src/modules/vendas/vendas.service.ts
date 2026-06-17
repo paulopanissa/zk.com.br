@@ -10,6 +10,8 @@ import { PaymentMethod, Prisma, VendaOrigem, VendaPaymentStatus, VendaStatus } f
 import { JwtSystemPayload } from '../../common/auth/types/jwt-payload.type';
 import { TenancyService } from '../../common/tenancy/tenancy.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { CuponsRepository } from '../cupons/cupons.repository';
+import { CouponValidationResult, CuponsService } from '../cupons/cupons.service';
 import { PrismaTx, StockRepository } from '../stock/stock.repository';
 import { AddItemDto } from './dto/add-item.dto';
 import { CheckoutDto } from './dto/checkout.dto';
@@ -28,6 +30,8 @@ export class VendasService {
     private readonly tenancy: TenancyService,
     private readonly prisma: PrismaService,
     private readonly stockRepository: StockRepository,
+    private readonly cuponsService: CuponsService,
+    private readonly cuponsRepository: CuponsRepository,
   ) {}
 
   // ─── Venda ───────────────────────────────────────────────────────────────────
@@ -199,8 +203,24 @@ export class VendasService {
       throw new UnprocessableEntityException('Não é possível finalizar uma venda sem itens');
     }
 
+    // Validar cupom ANTES de abrir a transação — falha rápida
+    let couponValidation: CouponValidationResult | null = null;
+    if (dto.coupon_code) {
+      const productIds = venda.items.map((i) => i.product_id);
+      couponValidation = await this.cuponsService.validateForUnit(
+        dto.coupon_code,
+        productIds,
+        unitId,
+        venda.total_liquido_centavos,
+      );
+    }
+
+    // Calcular total líquido com desconto do cupom
+    const descontoCupom = couponValidation?.discount_centavos ?? 0;
+    const totalLiquidoComCupom = Math.max(0, venda.total_liquido_centavos - descontoCupom);
+
     const totalPagamentos = dto.pagamentos.reduce((s, p) => s + p.valor_centavos, 0);
-    const totalLiquido = venda.total_liquido_centavos;
+    const totalLiquido = totalLiquidoComCupom;
 
     if (totalPagamentos < totalLiquido) {
       throw new BadRequestException(
@@ -257,15 +277,33 @@ export class VendasService {
         });
       }
 
-      // Finalizar venda
+      // Finalizar venda — atualiza total líquido se cupom foi aplicado
       await tx.venda.update({
         where: { id, unidade_id: unitId },
         data: {
           status: VendaStatus.FINALIZADA,
           finalizada_em: new Date(),
+          ...(couponValidation
+            ? {
+                desconto_total_centavos: venda.desconto_total_centavos + descontoCupom,
+                total_liquido_centavos: totalLiquidoComCupom,
+              }
+            : {}),
           ...(dto.observacao ? { observacao: dto.observacao } : {}),
         },
       });
+
+      // Registrar uso do cupom dentro da tx — atômico com a finalização da venda (C2)
+      if (couponValidation) {
+        const couponResult = await this.cuponsRepository.incrementUsesInTx(
+          tx as unknown as PrismaService,
+          couponValidation.coupon_id,
+          id,
+        );
+        if (!couponResult.success) {
+          throw new UnprocessableEntityException('Cupom atingiu o limite de usos durante o checkout');
+        }
+      }
     });
 
     return (await this.repository.findById(id, unitId))!;
@@ -463,7 +501,23 @@ export class VendasService {
         s + Math.max(0, Math.round(i.preco_unitario_centavos * i.quantidade) - i.desconto_item_centavos),
       0,
     );
-    const totalLiquido = Math.max(0, totalItens - dto.desconto_total_centavos);
+    const totalSemCupom = Math.max(0, totalItens - dto.desconto_total_centavos);
+
+    // Validar cupom ANTES de abrir a transação — falha rápida
+    let couponValidation: CouponValidationResult | null = null;
+    if (dto.coupon_code) {
+      const productIds = dto.items.map((i) => i.product_id);
+      couponValidation = await this.cuponsService.validateForUnit(
+        dto.coupon_code,
+        productIds,
+        unitId,
+        totalSemCupom,
+      );
+    }
+
+    const descontoCupom = couponValidation?.discount_centavos ?? 0;
+    const descontoTotal = dto.desconto_total_centavos + descontoCupom;
+    const totalLiquido = Math.max(0, totalSemCupom - descontoCupom);
 
     if (dto.cliente_id) {
       const customer = await this.prisma.customer.findFirst({
@@ -473,8 +527,8 @@ export class VendasService {
       if (!customer) throw new NotFoundException('Cliente não encontrado nesta unidade');
     }
 
-    return this.prisma.$transaction(async (tx) => {
-      const venda = await tx.venda.create({
+    const venda = await this.prisma.$transaction(async (tx) => {
+      const novaVenda = await tx.venda.create({
         data: {
           unidade_id: unitId,
           status: VendaStatus.FINALIZADA,
@@ -482,7 +536,7 @@ export class VendasService {
           created_by: user.sub,
           sync_id: dto.sync_id,
           observacao: dto.observacao ?? null,
-          desconto_total_centavos: dto.desconto_total_centavos,
+          desconto_total_centavos: descontoTotal,
           total_bruto_centavos: totalBruto,
           total_liquido_centavos: totalLiquido,
           finalizada_em: new Date(dto.created_at),
@@ -499,7 +553,7 @@ export class VendasService {
         );
         const item = await tx.vendaItem.create({
           data: {
-            venda_id: venda.id,
+            venda_id: novaVenda.id,
             product_id: itemDto.product_id,
             numero_item: itemNumero++,
             quantidade: new Decimal(itemDto.quantidade),
@@ -515,7 +569,7 @@ export class VendasService {
           unitId,
           itemDto.product_id,
           itemDto.quantidade,
-          `sale-${venda.id}-item-${item.id}`,
+          `sale-${novaVenda.id}-item-${item.id}`,
           item.id,
           user.sub,
         );
@@ -524,7 +578,7 @@ export class VendasService {
       for (const pag of dto.pagamentos) {
         await tx.vendaPayment.create({
           data: {
-            venda_id: venda.id,
+            venda_id: novaVenda.id,
             metodo: pag.metodo,
             valor_centavos: pag.valor_centavos,
             status: VendaPaymentStatus.PAGO,
@@ -534,7 +588,21 @@ export class VendasService {
         });
       }
 
-      return venda;
+      // Registrar uso do cupom dentro da tx — atômico com a criação da venda (C2)
+      if (couponValidation) {
+        const couponResult = await this.cuponsRepository.incrementUsesInTx(
+          tx as unknown as PrismaService,
+          couponValidation.coupon_id,
+          novaVenda.id,
+        );
+        if (!couponResult.success) {
+          throw new UnprocessableEntityException('Cupom atingiu o limite de usos durante o sync offline');
+        }
+      }
+
+      return novaVenda;
     });
+
+    return venda;
   }
 }

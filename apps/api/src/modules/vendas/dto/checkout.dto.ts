@@ -35,4 +35,9 @@ export class CheckoutDto {
   @IsString()
   @IsOptional()
   observacao?: string;
+
+  @ApiPropertyOptional({ description: 'Código de cupom para aplicar desconto automático' })
+  @IsString()
+  @IsOptional()
+  coupon_code?: string;
 }
