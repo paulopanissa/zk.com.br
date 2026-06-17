@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
-import { ConfigModule } from '@nestjs/config';
+import { BullModule } from '@nestjs/bullmq';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { PrismaModule } from './prisma/prisma.module';
 import { RedisModule } from './common/redis/redis.module';
@@ -30,6 +31,7 @@ import { AlertasModule } from './modules/alertas/alertas.module';
 import { EntregasModule } from './modules/entregas/entregas.module';
 import { RelatoriosModule } from './modules/relatorios/relatorios.module';
 import { AiKeysModule } from './modules/ai-keys/ai-keys.module';
+import { AiIntegrationModule } from './modules/ai-integration/ai-integration.module';
 import { TenancyModule } from './common/tenancy/tenancy.module';
 import { JwtSystemGuard } from './common/auth/guards/jwt-system.guard';
 import { RolesGuard } from './common/auth/guards/roles.guard';
@@ -38,6 +40,21 @@ import { RolesGuard } from './common/auth/guards/roles.guard';
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     ThrottlerModule.forRoot([{ ttl: 60000, limit: 60 }]),
+    BullModule.forRootAsync({
+      useFactory: (config: ConfigService) => {
+        const url = new URL(config.getOrThrow<string>('REDIS_URL'));
+        return {
+          connection: {
+            host: url.hostname,
+            port: parseInt(url.port || '6379', 10),
+            password: url.password || undefined,
+            db: parseInt(url.pathname.slice(1) || '0', 10),
+            maxRetriesPerRequest: null,
+          },
+        };
+      },
+      inject: [ConfigService],
+    }),
     PrismaModule,
     RedisModule,
     AuthModule,
@@ -67,6 +84,7 @@ import { RolesGuard } from './common/auth/guards/roles.guard';
     EntregasModule,
     RelatoriosModule,
     AiKeysModule,
+    AiIntegrationModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

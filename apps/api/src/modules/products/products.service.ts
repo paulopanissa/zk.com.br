@@ -17,6 +17,8 @@ import { UpdateProductFiscalDto } from './dto/update-product-fiscal.dto';
 import { UpdateProductPricingDto } from './dto/update-product-pricing.dto';
 import { UpdateProductSeoDto } from './dto/update-product-seo.dto';
 import { ProductFull, ProductsRepository } from './products.repository';
+import { AiIntegrationService } from '../ai-integration/ai-integration.service';
+import { AiContentType } from '@prisma/client';
 
 function slugify(text: string): string {
   return text
@@ -41,6 +43,7 @@ export class ProductsService {
   constructor(
     private readonly repository: ProductsRepository,
     private readonly tenancy: TenancyService,
+    private readonly aiIntegration: AiIntegrationService,
   ) {}
 
   async create(dto: CreateProductDto, user: JwtSystemPayload): Promise<ProductFull> {
@@ -239,10 +242,11 @@ export class ProductsService {
     return this.repository.updateSeo(id, data);
   }
 
-  async enqueueSeoGeneration(id: string, user: JwtSystemPayload): Promise<void> {
-    await this.findById(id, user);
-    // TODO: enqueue RabbitMQ task for AI/SEO module (27) to generate SEO content and Schema.org JSON-LD
-    // Example: await this.amqpConnection.publish('erp', 'seo.generate', { product_id: id });
+  async enqueueSeoGeneration(id: string, user: JwtSystemPayload): Promise<{ generation_id: string; status: string }> {
+    return this.aiIntegration.requestGeneration(
+      { product_id: id, types: [AiContentType.DESCRIPTION, AiContentType.SHORT_DESCRIPTION, AiContentType.SEO, AiContentType.SCHEMA_ORG] },
+      user,
+    );
   }
 
   async addMedia(
