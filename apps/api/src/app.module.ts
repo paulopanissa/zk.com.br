@@ -10,6 +10,8 @@ import { CompanySettingsModule } from './modules/company-settings/company-settin
 import { UnitsModule } from './modules/units/units.module';
 import { BrandsModule } from './modules/brands/brands.module';
 import { CategoriesModule } from './modules/categories/categories.module';
+import { SuppliersModule } from './modules/suppliers/suppliers.module';
+import { CostCenterModule } from './modules/cost-center/cost-center.module';
 import { TenancyModule } from './common/tenancy/tenancy.module';
 import { JwtSystemGuard } from './common/auth/guards/jwt-system.guard';
 import { RolesGuard } from './common/auth/guards/roles.guard';
@@ -27,6 +29,8 @@ import { RolesGuard } from './common/auth/guards/roles.guard';
     UnitsModule,
     BrandsModule,
     CategoriesModule,
+    SuppliersModule,
+    CostCenterModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
