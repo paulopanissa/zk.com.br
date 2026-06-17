@@ -24,4 +24,8 @@ export class RedisService {
   async exists(key: string): Promise<boolean> {
     return (await this.redis.exists(key)) > 0;
   }
+
+  async ping(): Promise<string> {
+    return this.redis.ping();
+  }
 }
