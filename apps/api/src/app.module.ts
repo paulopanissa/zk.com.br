@@ -5,6 +5,7 @@ import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { PrismaModule } from './prisma/prisma.module';
 import { RedisModule } from './common/redis/redis.module';
 import { AuthModule } from './common/auth/auth.module';
+import { StorageModule } from './common/storage/storage.module';
 import { HealthModule } from './health/health.module';
 import { CompanySettingsModule } from './modules/company-settings/company-settings.module';
 import { UnitsModule } from './modules/units/units.module';
@@ -26,6 +27,7 @@ import { RolesGuard } from './common/auth/guards/roles.guard';
     PrismaModule,
     RedisModule,
     AuthModule,
+    StorageModule,
     HealthModule,
     TenancyModule,
     CompanySettingsModule,
