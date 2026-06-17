@@ -26,6 +26,7 @@ import { LgpdModule } from './modules/lgpd/lgpd.module';
 import { CuponsModule } from './modules/cupons/cupons.module';
 import { NfEntradaModule } from './modules/nf-entrada/nf-entrada.module';
 import { VendasModule } from './modules/vendas/vendas.module';
+import { AlertasModule } from './modules/alertas/alertas.module';
 import { EntregasModule } from './modules/entregas/entregas.module';
 import { TenancyModule } from './common/tenancy/tenancy.module';
 import { JwtSystemGuard } from './common/auth/guards/jwt-system.guard';
@@ -60,6 +61,7 @@ import { RolesGuard } from './common/auth/guards/roles.guard';
     NfEntradaModule,
     VendasModule,
     CuponsModule,
+    AlertasModule,
     EntregasModule,
   ],
   providers: [
