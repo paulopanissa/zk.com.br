@@ -1,6 +1,8 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { Brand, Prisma } from '@prisma/client';
 import { TenancyService } from '../../common/tenancy/tenancy.service';
+import { StorageService } from '../../common/storage/storage.service';
+import { StorageFolder } from '../../common/storage/storage.types';
 import { JwtSystemPayload } from '../../common/auth/types/jwt-payload.type';
 import { BrandPage, BrandsRepository } from './brands.repository';
 import { CreateBrandDto } from './dto/create-brand.dto';
@@ -21,6 +23,7 @@ export class BrandsService {
   constructor(
     private readonly repository: BrandsRepository,
     private readonly tenancy: TenancyService,
+    private readonly storage: StorageService,
   ) {}
 
   async create(dto: CreateBrandDto, user: JwtSystemPayload): Promise<Brand> {
@@ -40,7 +43,12 @@ export class BrandsService {
       suffix++;
     }
 
-    return this.repository.create({ unidade_id: unitId, name: dto.name, slug });
+    return this.repository.create({
+      unidade_id: unitId,
+      name: dto.name,
+      slug,
+      logo_url: dto.logo_url,
+    });
   }
 
   async findAll(filters: ListBrandsDto, user: JwtSystemPayload): Promise<BrandPage> {
@@ -81,11 +89,47 @@ export class BrandsService {
       updateData.active = dto.active;
     }
 
+    if (dto.logo_url !== undefined) {
+      updateData.logo_url = dto.logo_url;
+      // When setting an external URL, clear any stored file key
+      updateData.logo_storage_key = null;
+    }
+
     return this.repository.update(id, updateData);
   }
 
+  async uploadLogo(id: string, file: Express.Multer.File, user: JwtSystemPayload): Promise<Brand> {
+    const brand = await this.findById(id, user);
+
+    // Delete previous stored logo before uploading new one
+    if (brand.logo_storage_key) {
+      await this.storage.delete(brand.logo_storage_key).catch(() => {});
+    }
+
+    const result = await this.storage.upload(file.buffer, {
+      folder: StorageFolder.BRAND_LOGO,
+      filename: file.originalname,
+      mime_type: file.mimetype,
+      public: true,
+    });
+
+    const logo_url = this.storage.getPublicUrl(result.key);
+
+    return this.repository.updateLogoFields(id, logo_url, result.key);
+  }
+
+  async removeLogo(id: string, user: JwtSystemPayload): Promise<Brand> {
+    const brand = await this.findById(id, user);
+
+    if (brand.logo_storage_key) {
+      await this.storage.delete(brand.logo_storage_key).catch(() => {});
+    }
+
+    return this.repository.updateLogoFields(id, null, null);
+  }
+
   async delete(id: string, user: JwtSystemPayload): Promise<void> {
-    await this.findById(id, user);
+    const brand = await this.findById(id, user);
 
     const links = await this.repository.countProductLinks(id);
 
@@ -93,6 +137,11 @@ export class BrandsService {
       throw new ConflictException(
         'Esta marca possui produtos vinculados. Desative-a em vez de excluir.',
       );
+    }
+
+    // Clean up stored logo before deleting brand record
+    if (brand.logo_storage_key) {
+      await this.storage.delete(brand.logo_storage_key).catch(() => {});
     }
 
     await this.repository.hardDelete(id);

@@ -64,8 +64,15 @@ export class BrandsRepository {
     });
   }
 
-  create(data: { unidade_id: string; name: string; slug: string }): Promise<Brand> {
+  create(data: { unidade_id: string; name: string; slug: string; logo_url?: string }): Promise<Brand> {
     return this.prisma.brand.create({ data });
+  }
+
+  updateLogoFields(id: string, logo_url: string | null, logo_storage_key: string | null): Promise<Brand> {
+    return this.prisma.brand.update({
+      where: { id },
+      data: { logo_url, logo_storage_key },
+    });
   }
 
   update(id: string, data: Prisma.BrandUpdateInput): Promise<Brand> {

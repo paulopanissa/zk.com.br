@@ -9,8 +9,11 @@ import {
   Patch,
   Post,
   Query,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiBearerAuth, ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { SystemRole } from '@prisma/client';
 import { CurrentUser } from '../../common/auth/decorators/current-user.decorator';
 import { Roles } from '../../common/auth/decorators/roles.decorator';
@@ -50,13 +53,37 @@ export class BrandsController {
 
   @Patch(':id')
   @Roles(SystemRole.ADMINISTRADOR)
-  @ApiOperation({ summary: 'Atualizar dados de uma marca' })
+  @ApiOperation({ summary: 'Atualizar dados de uma marca (nome, status, logo_url externa)' })
   update(
     @Param('id') id: string,
     @Body() dto: UpdateBrandDto,
     @CurrentUser() user: JwtSystemPayload,
   ) {
     return this.brandsService.update(id, dto, user);
+  }
+
+  @Post(':id/logo')
+  @Roles(SystemRole.ADMINISTRADOR)
+  @UseInterceptors(FileInterceptor('logo', { limits: { fileSize: 2 * 1024 * 1024 } }))
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({
+    summary: 'Upload do logotipo da marca',
+    description: 'Aceita PNG, JPG, WebP ou SVG até 2 MB. Substitui o logo anterior se existir.',
+  })
+  uploadLogo(
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File,
+    @CurrentUser() user: JwtSystemPayload,
+  ) {
+    return this.brandsService.uploadLogo(id, file, user);
+  }
+
+  @Delete(':id/logo')
+  @Roles(SystemRole.ADMINISTRADOR)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Remover logotipo da marca' })
+  removeLogo(@Param('id') id: string, @CurrentUser() user: JwtSystemPayload) {
+    return this.brandsService.removeLogo(id, user);
   }
 
   @Delete(':id')
@@ -66,9 +93,7 @@ export class BrandsController {
     summary: 'Excluir uma marca',
     description:
       'Exclui fisicamente a marca se não houver produtos vinculados. ' +
-      'Se houver produtos, retorna 409 — use PATCH /:id com { active: false } para desativação. ' +
-      // TODO: adicionar endpoints de upload/remoção de logo quando o módulo de storage estiver disponível.
-      'Endpoints de logo (upload/remoção) serão adicionados quando o módulo de storage estiver implementado.',
+      'Se houver produtos, retorna 409 — use PATCH /:id com { active: false } para desativação.',
   })
   delete(@Param('id') id: string, @CurrentUser() user: JwtSystemPayload): Promise<void> {
     return this.brandsService.delete(id, user);

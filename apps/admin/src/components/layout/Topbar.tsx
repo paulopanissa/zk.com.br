@@ -19,7 +19,7 @@ export function Topbar({
   className,
 }: TopbarProps) {
   const { user } = useAuth()
-  const userName = user?.nome ?? 'Admin'
+  const userName = user?.name ?? 'Admin'
   return (
     <header
       className={cn(
