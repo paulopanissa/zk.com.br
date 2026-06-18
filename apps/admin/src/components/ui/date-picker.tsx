@@ -25,7 +25,7 @@ export function DatePicker({
       disabled={disabled}
       positioning={{ strategy: 'fixed' }}
       onValueChange={(details) => {
-        const v = details.valueAsString[0]
+        const v = details.value[0]?.toString()
         onValueChange?.(v)
       }}
     >
