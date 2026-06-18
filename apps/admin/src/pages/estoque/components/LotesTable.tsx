@@ -5,7 +5,9 @@ import { type LoteMock, getLoteStatus, type LoteStatus } from '@/data/estoque.mo
 
 function formatDate(iso: string | null) {
   if (!iso) return '—'
-  return new Date(iso).toLocaleDateString('pt-BR')
+  // Append time to avoid UTC midnight → local day shift in UTC-3
+  const normalized = iso.includes('T') ? iso : `${iso}T12:00:00`
+  return new Date(normalized).toLocaleDateString('pt-BR')
 }
 
 const STATUS_CONFIG: Record<LoteStatus, { label: string; className: string }> = {

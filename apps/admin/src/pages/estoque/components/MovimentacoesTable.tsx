@@ -118,7 +118,7 @@ export function MovimentacoesTable({
                       ) : (
                         <ArrowUpCircle className="h-3.5 w-3.5" />
                       )}
-                      {entrada ? '+' : ''}{m.quantity.toLocaleString('pt-BR')}
+                      {entrada ? '+' : '-'}{Math.abs(m.quantity).toLocaleString('pt-BR')}
                     </span>
                   </td>
 

@@ -29,6 +29,7 @@ type TipoFiltro = 'all' | StockMovementType
 function ToggleChip({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
   return (
     <button
+      type="button"
       onClick={onClick}
       className={cn(
         'flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium border transition-colors',
