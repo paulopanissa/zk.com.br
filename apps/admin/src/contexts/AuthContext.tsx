@@ -3,9 +3,9 @@ import { api, setAuthToken } from '@/lib/api'
 
 interface SystemUser {
   id: string
-  nome: string
+  name: string
   email: string
-  roles: string[]
+  role: string
 }
 
 interface AuthState {
