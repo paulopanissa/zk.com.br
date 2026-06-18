@@ -17,11 +17,19 @@ const METODOS: { id: MetodoPagamento; label: string; emoji: string }[] = [
 
 interface PagamentoModalProps {
   totalCentavos: number
+  subtotalCentavos?: number
+  descontoCentavos?: number
   onConfirm: (metodo: MetodoPagamento, trocoCentavos: number) => void
   onClose: () => void
 }
 
-export function PagamentoModal({ totalCentavos, onConfirm, onClose }: PagamentoModalProps) {
+export function PagamentoModal({
+  totalCentavos,
+  subtotalCentavos,
+  descontoCentavos = 0,
+  onConfirm,
+  onClose,
+}: PagamentoModalProps) {
   const [metodo, setMetodo] = useState<MetodoPagamento | null>(null)
   const [valorRecebido, setValorRecebido] = useState('')
   const [confirmado, setConfirmado] = useState(false)
@@ -65,9 +73,24 @@ export function PagamentoModal({ totalCentavos, onConfirm, onClose }: PagamentoM
         ) : (
           <div className="px-5 py-5 space-y-5">
             {/* Total */}
-            <div className="rounded-xl bg-primary/10 px-4 py-3 text-center">
-              <p className="text-sm text-muted-foreground">Total a pagar</p>
-              <p className="text-3xl font-bold tabular-nums text-primary">{formatBRL(totalCentavos)}</p>
+            <div className="rounded-xl bg-primary/10 px-4 py-3">
+              {descontoCentavos > 0 && subtotalCentavos !== undefined && (
+                <div className="mb-2 space-y-1 text-sm">
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>Subtotal</span>
+                    <span className="tabular-nums">{formatBRL(subtotalCentavos)}</span>
+                  </div>
+                  <div className="flex justify-between text-destructive font-medium">
+                    <span>Desconto</span>
+                    <span className="tabular-nums">−{formatBRL(descontoCentavos)}</span>
+                  </div>
+                  <div className="border-t border-primary/20 pt-1" />
+                </div>
+              )}
+              <div className="text-center">
+                <p className="text-sm text-muted-foreground">Total a pagar</p>
+                <p className="text-3xl font-bold tabular-nums text-primary">{formatBRL(totalCentavos)}</p>
+              </div>
             </div>
 
             {/* Método */}
