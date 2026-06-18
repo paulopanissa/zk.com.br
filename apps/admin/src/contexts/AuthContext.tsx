@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState } from 'react'
-import { api, setAuthToken } from '@/lib/api'
+import { api, setAuthToken, setAuthFailureCallback, TOKEN_KEY, REFRESH_KEY } from '@/lib/api'
 
 interface SystemUser {
   id: string
@@ -21,13 +21,11 @@ interface AuthContextValue extends AuthState {
 
 const AuthContext = createContext<AuthContextValue | null>(null)
 
-const TOKEN_KEY = 'zk_access_token'
-const REFRESH_KEY = 'zk_refresh_token'
-
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<AuthState>({ user: null, token: null })
   const [loading, setLoading] = useState(true)
 
+  // Restore session on mount
   useEffect(() => {
     const token = localStorage.getItem(TOKEN_KEY)
     if (!token) {
@@ -44,6 +42,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setAuthToken(null)
       })
       .finally(() => setLoading(false))
+  }, [])
+
+  // Register the hard-logout callback for the refresh interceptor
+  useEffect(() => {
+    setAuthFailureCallback(() => {
+      setAuthToken(null)
+      setState({ user: null, token: null })
+    })
+    return () => setAuthFailureCallback(null)
   }, [])
 
   async function login(email: string, password: string) {
@@ -69,23 +76,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setAuthToken(null)
     setState({ user: null, token: null })
   }
-
-  // Force logout on 401 so expired tokens don't leave the user in a broken state
-  useEffect(() => {
-    const id = api.interceptors.response.use(
-      (r) => r,
-      (err) => {
-        if (err?.response?.status === 401 && localStorage.getItem(TOKEN_KEY)) {
-          localStorage.removeItem(TOKEN_KEY)
-          localStorage.removeItem(REFRESH_KEY)
-          setAuthToken(null)
-          setState({ user: null, token: null })
-        }
-        return Promise.reject(err)
-      },
-    )
-    return () => api.interceptors.response.eject(id)
-  }, [])
 
   if (loading) return null
 
