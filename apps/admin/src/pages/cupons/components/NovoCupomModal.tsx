@@ -152,6 +152,7 @@ export function NovoCupomModal({ open, onClose, onCreate }: NovoCupomModalProps)
           <div className="grid grid-cols-2 gap-3">
             <Field label="Válido de">
               <DatePicker
+                id="dp-valid-from"
                 value={form.validFrom || undefined}
                 placeholder="dd/mm/aaaa"
                 onValueChange={(v) => set('validFrom', v ?? '')}
@@ -159,6 +160,7 @@ export function NovoCupomModal({ open, onClose, onCreate }: NovoCupomModalProps)
             </Field>
             <Field label="Válido até">
               <DatePicker
+                id="dp-valid-until"
                 value={form.validUntil || undefined}
                 placeholder="dd/mm/aaaa"
                 onValueChange={(v) => set('validUntil', v ?? '')}

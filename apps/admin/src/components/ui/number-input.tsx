@@ -34,9 +34,9 @@ export function NumberInput({
       step={step}
       disabled={disabled}
       onValueChange={(details) => onValueChange?.(details.valueAsNumber)}
-      className="flex items-center"
+      className="flex w-full items-center"
     >
-      <ArkNumberInput.Control className={cn('flex items-center rounded-md border border-input bg-background', className)}>
+      <ArkNumberInput.Control className={cn('flex w-full items-center rounded-md border border-input bg-background', className)}>
         <ArkNumberInput.DecrementTrigger className="flex h-9 w-9 shrink-0 items-center justify-center rounded-l-md border-r border-input text-muted-foreground hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-50">
           <ChevronDown className="h-3.5 w-3.5" />
         </ArkNumberInput.DecrementTrigger>
