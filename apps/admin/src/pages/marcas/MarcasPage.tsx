@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Edit2, Plus, QrCode as QrCodeIcon, Trash2, Upload, X } from 'lucide-react'
-import { FileUpload, QrCode } from '@ark-ui/react'
+import { Edit2, Plus, Trash2, Upload, X } from 'lucide-react'
+import { FileUpload } from '@ark-ui/react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -56,7 +56,6 @@ export function MarcasPage() {
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   const [fileUploadKey, setFileUploadKey] = useState(0)
-  const [qrModal, setQrModal] = useState<Brand | null>(null)
 
   const load = useCallback((p = page) => {
     setLoading(true)
@@ -231,15 +230,6 @@ export function MarcasPage() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                        onClick={() => setQrModal(brand)}
-                        title="QR Code"
-                      >
-                        <QrCodeIcon className="h-3.5 w-3.5" />
-                      </Button>
                       <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground" onClick={() => openEdit(brand)}>
                         <Edit2 className="h-3.5 w-3.5" />
                       </Button>
@@ -385,35 +375,6 @@ export function MarcasPage() {
         </DialogContent>
       </Dialog>
 
-      {/* QR Code dialog */}
-      <Dialog open={qrModal !== null} onOpenChange={(open) => { if (!open) setQrModal(null) }}>
-        <DialogContent className="sm:max-w-xs" onInteractOutside={(e) => e.preventDefault()}>
-          <DialogHeader>
-            <DialogTitle>QR Code — {qrModal?.name}</DialogTitle>
-          </DialogHeader>
-          <div className="flex flex-col items-center gap-4 py-4">
-            {qrModal && (
-              <QrCode.Root
-                value={`https://zkpetshop.com.br/marcas/${qrModal.slug}`}
-                encoding={{ ecc: 'H' }}
-                className="relative"
-              >
-                <QrCode.Frame className="w-48 h-48">
-                  <QrCode.Pattern />
-                </QrCode.Frame>
-                <QrCode.Overlay className="absolute inset-0 flex items-center justify-center">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-brand-orange text-white font-display font-bold text-xs shadow-sm">
-                    Z&amp;K
-                  </div>
-                </QrCode.Overlay>
-              </QrCode.Root>
-            )}
-            <p className="text-xs text-muted-foreground text-center break-all">
-              zkpetshop.com.br/marcas/{qrModal?.slug}
-            </p>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }
