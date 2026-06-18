@@ -3,6 +3,7 @@ import { Calendar, ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface DatePickerProps {
+  id?: string
   value?: string
   placeholder?: string
   className?: string
@@ -11,6 +12,7 @@ interface DatePickerProps {
 }
 
 export function DatePicker({
+  id,
   value,
   placeholder = 'Selecione uma data',
   className,
@@ -21,6 +23,7 @@ export function DatePicker({
 
   return (
     <ArkDatePicker.Root
+      id={id}
       value={parsedValue}
       disabled={disabled}
       positioning={{ strategy: 'fixed' }}
