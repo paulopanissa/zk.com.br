@@ -70,11 +70,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setState({ user: null, token: null })
   }
 
+  // Force logout on 401 so expired tokens don't leave the user in a broken state
+  useEffect(() => {
+    const id = api.interceptors.response.use(
+      (r) => r,
+      (err) => {
+        if (err?.response?.status === 401 && localStorage.getItem(TOKEN_KEY)) {
+          localStorage.removeItem(TOKEN_KEY)
+          localStorage.removeItem(REFRESH_KEY)
+          setAuthToken(null)
+          setState({ user: null, token: null })
+        }
+        return Promise.reject(err)
+      },
+    )
+    return () => api.interceptors.response.eject(id)
+  }, [])
+
   if (loading) return null
 
   return (
     <AuthContext.Provider
-      value={{ ...state, login, logout, isAuthenticated: !!state.token }}
+      value={{ ...state, login, logout, isAuthenticated: !!state.token && !!state.user }}
     >
       {children}
     </AuthContext.Provider>
