@@ -207,7 +207,7 @@ export function CategoriasPage() {
       )}
 
       <Dialog open={modal !== null} onOpenChange={(open) => { if (!open) setModal(null) }}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md" onInteractOutside={(e) => e.preventDefault()}>
           <DialogHeader>
             <DialogTitle>{modal?.mode === 'create' ? 'Nova categoria' : 'Editar categoria'}</DialogTitle>
           </DialogHeader>

@@ -192,7 +192,7 @@ export function MarcasPage() {
       )}
 
       <Dialog open={modal !== null} onOpenChange={(open) => { if (!open) setModal(null) }}>
-        <DialogContent className="sm:max-w-sm">
+        <DialogContent className="sm:max-w-sm" onInteractOutside={(e) => e.preventDefault()}>
           <DialogHeader>
             <DialogTitle>{modal?.mode === 'create' ? 'Nova marca' : 'Editar marca'}</DialogTitle>
           </DialogHeader>
