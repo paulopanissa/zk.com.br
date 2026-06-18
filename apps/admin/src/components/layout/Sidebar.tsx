@@ -16,6 +16,7 @@ import {
   Bell,
   Key,
   Percent,
+  Building2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -41,6 +42,7 @@ const navItems: NavItem[] = [
   { icon: Bell, label: 'Notificações', href: '/notificacoes', group: 'Sistema' },
   { icon: Key, label: 'API Keys de IA', href: '/ai-keys', group: 'Sistema' },
   { icon: Shield, label: 'LGPD', href: '/lgpd', group: 'Sistema' },
+  { icon: Building2, label: 'Empresa', href: '/empresa', group: 'Sistema' },
   { icon: Settings, label: 'Configurações', href: '/configuracoes', group: 'Sistema' },
 ]
 
