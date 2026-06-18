@@ -13,6 +13,8 @@ import {
 } from '@/components/ui/dropdown-menu'
 
 const NOTIFICATION_COUNT = 0 // TODO: integrar endpoint de notificações
+// TODO: carregar lista de unidades do contexto de auth quando disponível
+const STORE_UNITS = [{ id: 1, name: 'Loja Centro' }]
 
 interface BreadcrumbItem {
   label: string
@@ -33,6 +35,7 @@ export function Topbar({ breadcrumbs, className }: TopbarProps) {
   const userName = user?.name ?? 'Admin'
   const userInitials = userName.slice(0, 2).toUpperCase()
   const userEmail = user?.email ?? ''
+  const [activeUnit, setActiveUnit] = useState(STORE_UNITS[0])
 
   function handleSearchSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -81,25 +84,56 @@ export function Topbar({ breadcrumbs, className }: TopbarProps) {
         {/* Right actions */}
         <div className="ml-auto flex items-center gap-1 md:gap-2">
 
-          {/* Unit selector — TODO: carregar unidade do contexto de auth */}
-          <button className="hidden sm:flex items-center gap-1.5 rounded-xl border border-border px-3 py-1.5 text-sm text-foreground hover:border-brand-orange transition-colors">
-            <Store className="h-3.5 w-3.5 text-muted-foreground" />
-            <span className="hidden lg:inline">Loja Centro</span>
-            <ChevronDown className="h-3 w-3 text-muted-foreground" />
-          </button>
+          {/* Unit selector */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="hidden sm:flex items-center gap-1.5 rounded-xl border border-border px-3 py-1.5 text-sm text-foreground hover:border-brand-orange transition-colors focus:outline-none">
+                <Store className="h-3.5 w-3.5 text-muted-foreground" />
+                <span className="hidden lg:inline">{activeUnit.name}</span>
+                <ChevronDown className="h-3 w-3 text-muted-foreground" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuLabel>Unidade</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {STORE_UNITS.map((unit) => (
+                <DropdownMenuItem
+                  key={unit.id}
+                  onClick={() => setActiveUnit(unit)}
+                  className={cn(activeUnit.id === unit.id && 'font-medium text-brand-orange')}
+                >
+                  <Store className="mr-2 h-4 w-4" />
+                  {unit.name}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
 
           {/* Notifications */}
-          <button className="relative flex h-8 w-8 items-center justify-center rounded-full hover:bg-surface-alt transition-colors">
-            <Bell className="h-4 w-4 text-muted-foreground" />
-            {NOTIFICATION_COUNT > 0 && (
-              <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-brand-orange text-[10px] font-bold text-white leading-none">
-                {NOTIFICATION_COUNT > 9 ? '9+' : NOTIFICATION_COUNT}
-              </span>
-            )}
-            {NOTIFICATION_COUNT === 0 && (
-              <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-brand-orange" />
-            )}
-          </button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="relative flex h-8 w-8 items-center justify-center rounded-full hover:bg-surface-alt transition-colors focus:outline-none">
+                <Bell className="h-4 w-4 text-muted-foreground" />
+                {NOTIFICATION_COUNT > 0 && (
+                  <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-brand-orange text-[10px] font-bold text-white leading-none">
+                    {NOTIFICATION_COUNT > 9 ? '9+' : NOTIFICATION_COUNT}
+                  </span>
+                )}
+                {NOTIFICATION_COUNT === 0 && (
+                  <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-brand-orange" />
+                )}
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-72">
+              <DropdownMenuLabel>Notificações</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {NOTIFICATION_COUNT === 0 ? (
+                <div className="px-3 py-6 text-center text-sm text-muted-foreground">
+                  Nenhuma notificação
+                </div>
+              ) : null}
+            </DropdownMenuContent>
+          </DropdownMenu>
 
           {/* User menu */}
           <DropdownMenu>
