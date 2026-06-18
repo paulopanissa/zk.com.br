@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard,
   Package,
@@ -18,8 +19,10 @@ import {
   Key,
   Percent,
   Building2,
+  LogOut,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useAuth } from '@/contexts/AuthContext'
 
 interface NavItem {
   icon: React.ComponentType<{ className?: string }>
@@ -54,6 +57,13 @@ interface SidebarProps {
 
 export function Sidebar({ currentPath = '/' }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false)
+  const { logout } = useAuth()
+  const navigate = useNavigate()
+
+  async function handleLogout() {
+    await logout()
+    navigate('/login', { replace: true })
+  }
 
   const groups = navItems.reduce<Record<string, NavItem[]>>((acc, item) => {
     const group = item.group ?? 'Outros'
@@ -99,9 +109,9 @@ export function Sidebar({ currentPath = '/' }: SidebarProps) {
               const Icon = item.icon
               const isActive = currentPath === item.href
               return (
-                <a
+                <Link
                   key={item.href}
-                  href={item.href}
+                  to={item.href}
                   title={collapsed ? item.label : undefined}
                   className={cn(
                     'flex items-center gap-3 rounded-xl px-2 py-2 text-sm transition-colors',
@@ -113,15 +123,26 @@ export function Sidebar({ currentPath = '/' }: SidebarProps) {
                 >
                   <Icon className="h-4 w-4 shrink-0" />
                   {!collapsed && <span className="truncate">{item.label}</span>}
-                </a>
+                </Link>
               )
             })}
           </div>
         ))}
       </nav>
 
-      {/* Collapse toggle */}
-      <div className="border-t border-white/10 p-2">
+      {/* Footer: logout + collapse */}
+      <div className="border-t border-white/10 p-2 space-y-1">
+        <button
+          onClick={handleLogout}
+          title={collapsed ? 'Sair' : undefined}
+          className={cn(
+            'flex w-full items-center gap-2 rounded-xl px-2 py-2 text-white/50 hover:bg-red-500/20 hover:text-red-300 transition-colors text-sm',
+            collapsed && 'justify-center',
+          )}
+        >
+          <LogOut className="h-4 w-4 shrink-0" />
+          {!collapsed && <span>Sair</span>}
+        </button>
         <button
           onClick={() => setCollapsed((c) => !c)}
           className={cn(
