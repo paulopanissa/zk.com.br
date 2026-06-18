@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { DollarSign, Store } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { cn } from '@/lib/utils'
+import { cn, parseBRLInput } from '@/lib/utils'
 
 interface AberturaCaixaScreenProps {
   storeName?: string
@@ -17,9 +17,7 @@ export function AberturaCaixaScreen({
 }: AberturaCaixaScreenProps) {
   const [valorStr, setValorStr] = useState('')
 
-  const valorCentavos = Math.round(
-    parseFloat(valorStr.replace(/\./g, '').replace(',', '.') || '0') * 100,
-  )
+  const valorCentavos = parseBRLInput(valorStr)
   const valido = valorCentavos > 0
 
   function handleAbrir() {
@@ -51,15 +49,18 @@ export function AberturaCaixaScreen({
           </div>
 
           <div className="space-y-2">
-            <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            <label
+              htmlFor="fundo-caixa"
+              className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+            >
               Fundo de caixa (R$)
             </label>
             <div className="relative">
               <DollarSign className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                type="number"
-                min={0}
-                step={0.01}
+                id="fundo-caixa"
+                type="text"
+                inputMode="decimal"
                 placeholder="0,00"
                 value={valorStr}
                 onChange={(e) => setValorStr(e.target.value)}

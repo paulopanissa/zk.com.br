@@ -1,9 +1,8 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { ArrowLeft, DollarSign, TrendingUp, CheckCircle2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { cn } from '@/lib/utils'
-import { formatBRL } from '@/data/produtos.mock'
+import { cn, formatBRL, parseBRLInput } from '@/lib/utils'
 import { RESUMO_TURNO_MOCK, METODO_LABEL, type MetodoPagamento } from '@/data/caixa.mock'
 
 const METODOS_ORDER: MetodoPagamento[] = [
@@ -27,19 +26,24 @@ export function FechamentoCaixaScreen({
 }: FechamentoCaixaScreenProps) {
   const [contagemStr, setContagemStr] = useState('')
   const [confirmado, setConfirmado] = useState(false)
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current)
+    }
+  }, [])
 
   const resumo = RESUMO_TURNO_MOCK
   const dinheiroVendasCentavos = resumo.porMetodo.DINHEIRO
   const dinheiroEsperadoCentavos = fundoCentavos + dinheiroVendasCentavos
 
-  const contagemCentavos = Math.round(
-    parseFloat(contagemStr.replace(/\./g, '').replace(',', '.') || '0') * 100,
-  )
+  const contagemCentavos = parseBRLInput(contagemStr)
   const diferencaCentavos = contagemStr !== '' ? contagemCentavos - dinheiroEsperadoCentavos : null
 
   function handleConfirmar() {
     setConfirmado(true)
-    setTimeout(() => onFechar(), 1500)
+    timerRef.current = setTimeout(() => onFechar(), 1500)
   }
 
   if (confirmado) {
@@ -62,6 +66,7 @@ export function FechamentoCaixaScreen({
           type="button"
           onClick={onCancelar}
           className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+          aria-label="Voltar para venda"
         >
           <ArrowLeft className="h-4 w-4" />
         </button>
@@ -123,15 +128,18 @@ export function FechamentoCaixaScreen({
 
           {/* Contagem */}
           <div className="space-y-1.5 pt-1">
-            <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            <label
+              htmlFor="contagem-dinheiro"
+              className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+            >
               Dinheiro contado (R$)
             </label>
             <div className="relative">
               <DollarSign className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                type="number"
-                min={0}
-                step={0.01}
+                id="contagem-dinheiro"
+                type="text"
+                inputMode="decimal"
                 placeholder="0,00"
                 value={contagemStr}
                 onChange={(e) => setContagemStr(e.target.value)}
@@ -168,15 +176,12 @@ export function FechamentoCaixaScreen({
 
         {/* Actions */}
         <div className="flex gap-3 pb-4">
-          <Button
-            variant="outline"
-            className="flex-1 h-11"
-            onClick={onCancelar}
-          >
+          <Button variant="outline" className="flex-1 h-11" onClick={onCancelar}>
             Cancelar
           </Button>
           <Button
             className="flex-1 h-11 font-bold"
+            disabled={contagemStr === ''}
             onClick={handleConfirmar}
           >
             Fechar Caixa

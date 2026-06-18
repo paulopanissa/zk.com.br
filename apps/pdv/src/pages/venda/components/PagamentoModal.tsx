@@ -3,7 +3,7 @@ import { X, CheckCircle2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
-import { formatBRL } from '@/data/produtos.mock'
+import { formatBRL, parseBRLInput } from '@/lib/utils'
 
 export type MetodoPagamento = 'DINHEIRO' | 'PIX' | 'CARTAO_DEBITO' | 'CARTAO_CREDITO' | 'MAQUININHA_POINT'
 
@@ -26,7 +26,7 @@ export function PagamentoModal({ totalCentavos, onConfirm, onClose }: PagamentoM
   const [valorRecebido, setValorRecebido] = useState('')
   const [confirmado, setConfirmado] = useState(false)
 
-  const valorRecebidoCentavos = Math.round(parseFloat(valorRecebido.replace(/\./g, '').replace(',', '.') || '0') * 100)
+  const valorRecebidoCentavos = parseBRLInput(valorRecebido)
   const trocoCentavos = metodo === 'DINHEIRO' ? Math.max(0, valorRecebidoCentavos - totalCentavos) : 0
   const valorInsuficiente = metodo === 'DINHEIRO' && valorRecebido !== '' && valorRecebidoCentavos < totalCentavos
   const canConfirm = metodo !== null && (metodo !== 'DINHEIRO' || valorRecebidoCentavos >= totalCentavos)
@@ -96,13 +96,16 @@ export function PagamentoModal({ totalCentavos, onConfirm, onClose }: PagamentoM
             {/* Valor recebido (apenas dinheiro) */}
             {metodo === 'DINHEIRO' && (
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                <label
+                  htmlFor="valor-recebido"
+                  className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+                >
                   Valor recebido (R$)
                 </label>
                 <Input
-                  type="number"
-                  min={0}
-                  step={0.01}
+                  id="valor-recebido"
+                  type="text"
+                  inputMode="decimal"
                   placeholder="0,00"
                   value={valorRecebido}
                   onChange={(e) => setValorRecebido(e.target.value)}
