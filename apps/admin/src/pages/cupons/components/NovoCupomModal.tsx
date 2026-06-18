@@ -6,6 +6,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import { DatePicker } from '@/components/ui/date-picker'
 import {
   Select,
   SelectContent,
@@ -150,10 +151,18 @@ export function NovoCupomModal({ open, onClose, onCreate }: NovoCupomModalProps)
           {/* Validade */}
           <div className="grid grid-cols-2 gap-3">
             <Field label="Válido de">
-              <Input type="date" value={form.validFrom} onChange={(e) => set('validFrom', e.target.value)} />
+              <DatePicker
+                value={form.validFrom || undefined}
+                placeholder="dd/mm/aaaa"
+                onValueChange={(v) => set('validFrom', v ?? '')}
+              />
             </Field>
             <Field label="Válido até">
-              <Input type="date" value={form.validUntil} onChange={(e) => set('validUntil', e.target.value)} />
+              <DatePicker
+                value={form.validUntil || undefined}
+                placeholder="dd/mm/aaaa"
+                onValueChange={(v) => set('validUntil', v ?? '')}
+              />
             </Field>
           </div>
 
