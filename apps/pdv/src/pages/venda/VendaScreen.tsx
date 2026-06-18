@@ -2,14 +2,24 @@ import { useState, useCallback } from 'react'
 import { ProdutoGrid } from './components/ProdutoGrid'
 import { Carrinho, type CartItem } from './components/Carrinho'
 import { PagamentoModal, type MetodoPagamento } from './components/PagamentoModal'
+import { ReciboModal, type VendaFinalizada } from './components/ReciboModal'
 import { type ProdutoPDV } from '@/data/produtos.mock'
 import { parseBRLInput } from '@/lib/utils'
 
 export type DescontoTipo = 'percent' | 'valor'
 
-export function VendaScreen() {
+interface VendaScreenProps {
+  storeName?: string
+  operatorName?: string
+}
+
+export function VendaScreen({
+  storeName = 'Zoro&Kaya',
+  operatorName = 'Operador',
+}: VendaScreenProps) {
   const [cart, setCart] = useState<CartItem[]>([])
   const [showPagamento, setShowPagamento] = useState(false)
+  const [vendaFinalizada, setVendaFinalizada] = useState<VendaFinalizada | null>(null)
   const [descontoTipo, setDescontoTipo] = useState<DescontoTipo>('percent')
   const [descontoInput, setDescontoInput] = useState('')
 
@@ -68,13 +78,23 @@ export function VendaScreen() {
   const totalCentavos = subtotalCentavos - descontoCentavos
 
   function handleFinalizarPagamento(metodo: MetodoPagamento, trocoCentavos: number) {
-    console.log('Venda finalizada', { metodo, trocoCentavos, cart, descontoCentavos })
-    setTimeout(() => {
-      setCart([])
-      setDescontoInput('')
-      setDescontoTipo('percent')
-      setShowPagamento(false)
-    }, 1400)
+    setVendaFinalizada({
+      items: [...cart],
+      subtotalCentavos,
+      descontoCentavos,
+      totalCentavos,
+      metodo,
+      trocoCentavos,
+      dataHora: new Date(),
+    })
+    setShowPagamento(false)
+  }
+
+  function handleNovaVenda() {
+    setCart([])
+    setDescontoInput('')
+    setDescontoTipo('percent')
+    setVendaFinalizada(null)
   }
 
   return (
@@ -108,6 +128,16 @@ export function VendaScreen() {
           totalCentavos={totalCentavos}
           onConfirm={handleFinalizarPagamento}
           onClose={() => setShowPagamento(false)}
+        />
+      )}
+
+      {/* Recibo — exibido após pagamento confirmado */}
+      {vendaFinalizada && (
+        <ReciboModal
+          venda={vendaFinalizada}
+          storeName={storeName}
+          operatorName={operatorName}
+          onNovaVenda={handleNovaVenda}
         />
       )}
     </div>
