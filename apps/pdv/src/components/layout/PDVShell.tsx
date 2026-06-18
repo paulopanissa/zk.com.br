@@ -1,4 +1,4 @@
-import { Wifi, WifiOff } from 'lucide-react'
+import { Wifi, WifiOff, LogOut } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface PDVShellProps {
@@ -6,6 +6,7 @@ interface PDVShellProps {
   isOnline?: boolean
   operatorName?: string
   storeName?: string
+  onFecharCaixa?: () => void
 }
 
 export function PDVShell({
@@ -13,6 +14,7 @@ export function PDVShell({
   isOnline = true,
   operatorName = 'Operador',
   storeName = 'Zoro&Kaya',
+  onFecharCaixa,
 }: PDVShellProps) {
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-background">
@@ -31,21 +33,35 @@ export function PDVShell({
           </div>
         </div>
 
-        {/* Online/Offline badge */}
-        <div
-          className={cn(
-            'flex items-center gap-1.5 rounded-pill px-2.5 py-1 text-xs font-medium',
-            isOnline
-              ? 'bg-success/10 text-success'
-              : 'bg-warning/10 text-warning',
+        {/* Right side: status + fechar caixa */}
+        <div className="flex items-center gap-2">
+          <div
+            className={cn(
+              'flex items-center gap-1.5 rounded-pill px-2.5 py-1 text-xs font-medium',
+              isOnline
+                ? 'bg-success/10 text-success'
+                : 'bg-warning/10 text-warning',
+            )}
+          >
+            {isOnline ? (
+              <Wifi className="h-3 w-3" />
+            ) : (
+              <WifiOff className="h-3 w-3" />
+            )}
+            {isOnline ? 'Online' : 'Offline'}
+          </div>
+
+          {onFecharCaixa && (
+            <button
+              type="button"
+              onClick={onFecharCaixa}
+              className="flex items-center gap-1.5 rounded-pill px-2.5 py-1 text-xs font-medium text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
+              title="Fechar caixa"
+            >
+              <LogOut className="h-3 w-3" />
+              Fechar Caixa
+            </button>
           )}
-        >
-          {isOnline ? (
-            <Wifi className="h-3 w-3" />
-          ) : (
-            <WifiOff className="h-3 w-3" />
-          )}
-          {isOnline ? 'Online' : 'Offline'}
         </div>
       </header>
 
