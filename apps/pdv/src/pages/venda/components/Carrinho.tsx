@@ -9,6 +9,7 @@ export interface CartItem {
   sku: string
   precoCentavos: number
   quantidade: number
+  maxQuantidade: number
 }
 
 interface CarrinhoProps {
@@ -72,8 +73,9 @@ export function Carrinho({ items, onUpdateQty, onRemove, onFinalizar }: Carrinho
                   </span>
                   <button
                     type="button"
+                    disabled={item.quantidade >= item.maxQuantidade}
                     onClick={() => onUpdateQty(item.id, +1)}
-                    className="flex h-7 w-7 items-center justify-center rounded-lg border border-border bg-background text-muted-foreground hover:border-primary hover:text-primary transition-colors"
+                    className="flex h-7 w-7 items-center justify-center rounded-lg border border-border bg-background text-muted-foreground hover:border-primary hover:text-primary transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     <Plus className="h-3 w-3" />
                   </button>

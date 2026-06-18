@@ -26,7 +26,7 @@ export function PagamentoModal({ totalCentavos, onConfirm, onClose }: PagamentoM
   const [valorRecebido, setValorRecebido] = useState('')
   const [confirmado, setConfirmado] = useState(false)
 
-  const valorRecebidoCentavos = Math.round(parseFloat(valorRecebido.replace(',', '.') || '0') * 100)
+  const valorRecebidoCentavos = Math.round(parseFloat(valorRecebido.replace(/\./g, '').replace(',', '.') || '0') * 100)
   const trocoCentavos = metodo === 'DINHEIRO' ? Math.max(0, valorRecebidoCentavos - totalCentavos) : 0
   const valorInsuficiente = metodo === 'DINHEIRO' && valorRecebido !== '' && valorRecebidoCentavos < totalCentavos
   const canConfirm = metodo !== null && (metodo !== 'DINHEIRO' || valorRecebidoCentavos >= totalCentavos)

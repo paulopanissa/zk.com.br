@@ -12,8 +12,10 @@ export function VendaScreen() {
     setCart((prev) => {
       const existing = prev.find((i) => i.id === produto.id)
       if (existing) {
+        const next = existing.quantidade + 1
+        if (next > existing.maxQuantidade) return prev
         return prev.map((i) =>
-          i.id === produto.id ? { ...i, quantidade: i.quantidade + 1 } : i,
+          i.id === produto.id ? { ...i, quantidade: next } : i,
         )
       }
       return [
@@ -24,6 +26,7 @@ export function VendaScreen() {
           sku: produto.sku,
           precoCentavos: produto.precoCentavos,
           quantidade: 1,
+          maxQuantidade: produto.estoqueDisponivel,
         },
       ]
     })
@@ -32,7 +35,11 @@ export function VendaScreen() {
   const handleUpdateQty = useCallback((id: string, delta: number) => {
     setCart((prev) =>
       prev
-        .map((i) => (i.id === id ? { ...i, quantidade: i.quantidade + delta } : i))
+        .map((i) =>
+          i.id === id
+            ? { ...i, quantidade: Math.min(Math.max(0, i.quantidade + delta), i.maxQuantidade) }
+            : i,
+        )
         .filter((i) => i.quantidade > 0),
     )
   }, [])
