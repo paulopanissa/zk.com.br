@@ -47,7 +47,7 @@ export default function App() {
           onCancelar={() => setCaixaStatus('aberto')}
         />
       ) : (
-        <VendaScreen />
+        <VendaScreen storeName={STORE_NAME} operatorName={OPERATOR_NAME} />
       )}
     </PDVShell>
   )
