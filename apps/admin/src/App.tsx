@@ -1,5 +1,8 @@
 import { BrowserRouter, Route, Routes, Navigate } from 'react-router-dom'
+import { AuthProvider } from '@/contexts/AuthContext'
+import { ProtectedRoute } from '@/components/auth/ProtectedRoute'
 import { AdminShell } from '@/components/layout/AdminShell'
+import { LoginPage } from '@/pages/login/LoginPage'
 import { DashboardPage } from '@/pages/dashboard/DashboardPage'
 import { ProdutosPage } from '@/pages/produtos/ProdutosPage'
 import { EmpresaPage } from '@/pages/empresa/EmpresaPage'
@@ -11,24 +14,42 @@ import { EstoquePage } from '@/pages/estoque/EstoquePage'
 import { PedidosPage } from '@/pages/pedidos/PedidosPage'
 import { PedidoDetalhe } from '@/pages/pedidos/PedidoDetalhe'
 
+function AppRoutes() {
+  return (
+    <Routes>
+      <Route path="/login" element={<LoginPage />} />
+      <Route
+        path="/*"
+        element={
+          <ProtectedRoute>
+            <AdminShell>
+              <Routes>
+                <Route path="/" element={<DashboardPage />} />
+                <Route path="/produtos" element={<ProdutosPage />} />
+                <Route path="/empresa" element={<EmpresaPage />} />
+                <Route path="/configuracoes" element={<ConfiguracoesPage />} />
+                <Route path="/clientes" element={<ClientesPage />} />
+                <Route path="/clientes/:id" element={<ClienteDetalhe />} />
+                <Route path="/cupons" element={<CuponsPage />} />
+                <Route path="/estoque" element={<EstoquePage />} />
+                <Route path="/pedidos" element={<PedidosPage />} />
+                <Route path="/pedidos/:id" element={<PedidoDetalhe />} />
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+            </AdminShell>
+          </ProtectedRoute>
+        }
+      />
+    </Routes>
+  )
+}
+
 export default function App() {
   return (
     <BrowserRouter>
-      <AdminShell>
-        <Routes>
-          <Route path="/" element={<DashboardPage />} />
-          <Route path="/produtos" element={<ProdutosPage />} />
-          <Route path="/empresa" element={<EmpresaPage />} />
-          <Route path="/configuracoes" element={<ConfiguracoesPage />} />
-          <Route path="/clientes" element={<ClientesPage />} />
-          <Route path="/clientes/:id" element={<ClienteDetalhe />} />
-          <Route path="/cupons" element={<CuponsPage />} />
-          <Route path="/estoque" element={<EstoquePage />} />
-          <Route path="/pedidos" element={<PedidosPage />} />
-          <Route path="/pedidos/:id" element={<PedidoDetalhe />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </AdminShell>
+      <AuthProvider>
+        <AppRoutes />
+      </AuthProvider>
     </BrowserRouter>
   )
 }

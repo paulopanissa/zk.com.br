@@ -1,5 +1,6 @@
 import { Bell, ChevronDown, Search, Store } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useAuth } from '@/contexts/AuthContext'
 
 interface BreadcrumbItem {
   label: string
@@ -9,16 +10,16 @@ interface BreadcrumbItem {
 interface TopbarProps {
   breadcrumbs?: BreadcrumbItem[]
   currentUnit?: string
-  userName?: string
   className?: string
 }
 
 export function Topbar({
   breadcrumbs,
   currentUnit = 'Loja Centro',
-  userName = 'Admin',
   className,
 }: TopbarProps) {
+  const { user } = useAuth()
+  const userName = user?.nome ?? 'Admin'
   return (
     <header
       className={cn(

@@ -1,11 +1,49 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ProdutosFilter, type ProdutosFiltros } from './components/ProdutosFilter'
 import { ProdutosTable } from './components/ProdutosTable'
-import { PRODUTOS_MOCK, CATEGORIAS, MARCAS } from '@/data/produtos.mock'
+import { api } from '@/lib/api'
+import { type ProdutoMock } from '@/data/produtos.mock'
 
-const LIMIT = 10
+const LIMIT = 20
+
+interface ApiProduct {
+  id: string
+  name: string
+  sku: string | null
+  active: boolean
+  featured: boolean
+  min_stock: number
+  pricing: { sale_price_cents: number; cost_price_cents: number } | null
+  category: { id: string; name: string; slug: string } | null
+  brand: { id: string; name: string; slug: string } | null
+  media: { url: string }[]
+}
+
+interface ApiListResponse {
+  data: ApiProduct[]
+  total: number
+  page: number
+  limit: number
+}
+
+function toMock(p: ApiProduct): ProdutoMock {
+  return {
+    id: p.id,
+    nome: p.name,
+    sku: p.sku ?? '',
+    categoria: p.category?.name ?? '—',
+    marca: p.brand?.name ?? '—',
+    precoVenda: p.pricing?.sale_price_cents ?? 0,
+    precoCusto: p.pricing?.cost_price_cents ?? 0,
+    estoque: 0,
+    estoqueMinimo: p.min_stock,
+    ativo: p.active,
+    destaque: p.featured,
+    imagem: p.media[0]?.url,
+  }
+}
 
 export function ProdutosPage() {
   const [filtros, setFiltros] = useState<ProdutosFiltros>({
@@ -16,22 +54,29 @@ export function ProdutosPage() {
     destaque: false,
   })
   const [page, setPage] = useState(1)
+  const [produtos, setProdutos] = useState<ProdutoMock[]>([])
+  const [total, setTotal] = useState(0)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  const produtosFiltrados = useMemo(() => {
-    const busca = filtros.busca.toLowerCase()
-    return PRODUTOS_MOCK.filter((p) => {
-      if (busca && !p.nome.toLowerCase().includes(busca) && !p.sku.toLowerCase().includes(busca))
-        return false
-      if (filtros.categoria !== 'all' && p.categoria !== filtros.categoria) return false
-      if (filtros.marca !== 'all' && p.marca !== filtros.marca) return false
-      if (filtros.somenteAtivos && !p.ativo) return false
-      if (filtros.destaque && !p.destaque) return false
-      return true
-    })
-  }, [filtros])
+  useEffect(() => {
+    setLoading(true)
+    setError(null)
 
-  const total = produtosFiltrados.length
-  const paginados = produtosFiltrados.slice((page - 1) * LIMIT, page * LIMIT)
+    const params: Record<string, string | number | boolean> = { page, limit: LIMIT }
+    if (filtros.busca) params.name = filtros.busca
+    if (filtros.somenteAtivos) params.active = true
+    if (filtros.destaque) params.featured = true
+
+    api
+      .get<ApiListResponse>('/products', { params })
+      .then((res) => {
+        setProdutos(res.data.data.map(toMock))
+        setTotal(res.data.total)
+      })
+      .catch(() => setError('Não foi possível carregar os produtos.'))
+      .finally(() => setLoading(false))
+  }, [filtros, page])
 
   function handleFiltrosChange(novosFiltros: ProdutosFiltros) {
     setFiltros(novosFiltros)
@@ -49,22 +94,33 @@ export function ProdutosPage() {
         </Button>
       </div>
 
-      {/* Filtros */}
+      {/* Filtros — categoria/marca still use mock values; will be API-driven in a future iteration */}
       <ProdutosFilter
         filtros={filtros}
-        categorias={CATEGORIAS}
-        marcas={MARCAS}
+        categorias={[]}
+        marcas={[]}
         onChange={handleFiltrosChange}
       />
 
-      {/* Tabela */}
-      <ProdutosTable
-        produtos={paginados}
-        page={page}
-        limit={LIMIT}
-        total={total}
-        onPageChange={setPage}
-      />
+      {error && (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          {error}
+        </div>
+      )}
+
+      {loading ? (
+        <div className="flex items-center justify-center py-16 text-muted-foreground text-sm">
+          Carregando produtos…
+        </div>
+      ) : (
+        <ProdutosTable
+          produtos={produtos}
+          page={page}
+          limit={LIMIT}
+          total={total}
+          onPageChange={setPage}
+        />
+      )}
     </div>
   )
 }
