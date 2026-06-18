@@ -42,12 +42,13 @@ function fmt(date: Date) {
 export function ReciboModal({ venda, storeName, operatorName, onNovaVenda }: ReciboModalProps) {
   return (
     <>
-      {/* Print styles — only the recibo content is visible when printing */}
+      {/* Print styles: visibility trick isolates receipt without hiding ancestors */}
       <style>{`
         @media print {
-          body > * { display: none !important; }
-          #recibo-print-area { display: block !important; position: static !important; }
-          #recibo-print-area * { color: #000 !important; background: #fff !important; border-color: #ccc !important; box-shadow: none !important; }
+          body * { visibility: hidden; }
+          #recibo-print-area, #recibo-print-area * { visibility: visible; }
+          #recibo-print-area { position: fixed; left: 0; top: 0; width: 100%; background: #fff !important; }
+          #recibo-print-area * { color: #000 !important; box-shadow: none !important; }
           .recibo-no-print { display: none !important; }
         }
       `}</style>
@@ -65,6 +66,9 @@ export function ReciboModal({ venda, storeName, operatorName, onNovaVenda }: Rec
 
           {/* Items */}
           <div className="px-5 py-4 space-y-1 max-h-56 overflow-y-auto">
+            {venda.items.length === 0 && (
+              <p className="text-sm text-muted-foreground text-center">Nenhum item</p>
+            )}
             {venda.items.map((item) => (
               <div key={item.id} className="flex justify-between text-sm gap-2">
                 <div className="flex-1 min-w-0">

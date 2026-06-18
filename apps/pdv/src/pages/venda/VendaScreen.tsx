@@ -79,7 +79,7 @@ export function VendaScreen({
 
   function handleFinalizarPagamento(metodo: MetodoPagamento, trocoCentavos: number) {
     setVendaFinalizada({
-      items: [...cart],
+      items: cart.map((i) => ({ ...i })),
       subtotalCentavos,
       descontoCentavos,
       totalCentavos,
