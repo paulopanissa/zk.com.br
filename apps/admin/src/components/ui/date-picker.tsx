@@ -3,6 +3,7 @@ import { Calendar, ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface DatePickerProps {
+  id?: string
   value?: string
   placeholder?: string
   className?: string
@@ -11,6 +12,7 @@ interface DatePickerProps {
 }
 
 export function DatePicker({
+  id,
   value,
   placeholder = 'Selecione uma data',
   className,
@@ -21,10 +23,12 @@ export function DatePicker({
 
   return (
     <ArkDatePicker.Root
+      id={id}
       value={parsedValue}
       disabled={disabled}
+      positioning={{ strategy: 'fixed' }}
       onValueChange={(details) => {
-        const v = details.valueAsString[0]
+        const v = details.value[0]?.toString()
         onValueChange?.(v)
       }}
     >
@@ -33,12 +37,12 @@ export function DatePicker({
           placeholder={placeholder}
           className="h-9 flex-1 bg-transparent px-3 text-sm focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
         />
-        <ArkDatePicker.Trigger className="flex h-9 w-9 shrink-0 items-center justify-center border-l border-input text-muted-foreground hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-50">
+        <ArkDatePicker.Trigger className="flex h-9 w-9 shrink-0 items-center justify-center rounded-r-md border-l border-input text-muted-foreground hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-50">
           <Calendar className="h-4 w-4" />
         </ArkDatePicker.Trigger>
       </ArkDatePicker.Control>
       <Portal>
-        <ArkDatePicker.Positioner className="z-50">
+        <ArkDatePicker.Positioner style={{ zIndex: 9999 }}>
           <ArkDatePicker.Content className="rounded-lg border border-border bg-popover p-3 shadow-md">
             <ArkDatePicker.View view="day">
               <ArkDatePicker.Context>
