@@ -12,6 +12,35 @@ interface DatePickerProps {
   onValueChange?: (value: string | undefined) => void
 }
 
+function applyDateMask(e: React.FormEvent<HTMLInputElement>) {
+  const el = e.currentTarget
+  const cursorPos = el.selectionStart ?? el.value.length
+  const digitsBeforeCursor = el.value.slice(0, cursorPos).replace(/\D/g, '').length
+
+  const digits = el.value.replace(/\D/g, '').slice(0, 8)
+  let masked = digits.slice(0, 2)
+  if (digits.length > 2) masked += '/' + digits.slice(2, 4)
+  if (digits.length > 4) masked += '/' + digits.slice(4, 8)
+
+  if (el.value === masked) return
+
+  el.value = masked
+
+  let digitCount = 0
+  let newPos = masked.length
+  for (let i = 0; i < masked.length; i++) {
+    if (masked[i] !== '/') digitCount++
+    if (digitCount === digitsBeforeCursor) { newPos = i + 1; break }
+  }
+  el.setSelectionRange(newPos, newPos)
+}
+
+function blockNonDigit(e: React.KeyboardEvent<HTMLInputElement>) {
+  if (e.ctrlKey || e.metaKey) return
+  const allowed = ['Backspace', 'Delete', 'Tab', 'Escape', 'Enter', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End']
+  if (!allowed.includes(e.key) && !/^\d$/.test(e.key)) e.preventDefault()
+}
+
 export function DatePicker({
   id,
   value,
@@ -26,6 +55,7 @@ export function DatePicker({
   return (
     <ArkDatePicker.Root
       id={id}
+      locale="pt-BR"
       value={parsedValue}
       disabled={disabled}
       open={open}
@@ -40,6 +70,8 @@ export function DatePicker({
         <ArkDatePicker.Input
           placeholder={placeholder}
           onClick={() => setOpen(true)}
+          onInput={applyDateMask}
+          onKeyDown={blockNonDigit}
           className="h-9 flex-1 bg-transparent px-3 text-sm focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
         />
         <ArkDatePicker.Trigger className="flex h-9 w-9 shrink-0 items-center justify-center rounded-r-md border-l border-input text-muted-foreground hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-50">
