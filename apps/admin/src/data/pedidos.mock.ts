@@ -262,9 +262,27 @@ export const PEDIDOS_MOCK: VendaMock[] = [
   },
 ]
 
+function findById(id: string): VendaMock {
+  const found = PEDIDOS_MOCK.find((p) => p.id === id)
+  if (!found) throw new Error(`Mock pedido id=${id} not found`)
+  return found
+}
+
+export const STATUS_CONFIG: Record<VendaStatus, { label: string; className: string }> = {
+  ABERTA:     { label: 'Aberta',     className: 'border-blue-300/40 bg-blue-50 text-blue-700 dark:text-blue-400' },
+  FINALIZADA: { label: 'Finalizada', className: 'border-success/40 bg-success/10 text-success' },
+  CANCELADA:  { label: 'Cancelada',  className: 'border-destructive/40 bg-destructive/10 text-destructive' },
+}
+
+export const ORIGEM_CONFIG: Record<VendaOrigem, { label: string; className: string }> = {
+  PDV:         { label: 'PDV',         className: 'border-primary/40 bg-primary/10 text-primary' },
+  ECOMMERCE:   { label: 'E-commerce',  className: 'border-purple-300/40 bg-purple-50 text-purple-700 dark:text-purple-400' },
+  PDV_OFFLINE: { label: 'PDV Offline', className: 'border-warning/40 bg-warning/10 text-warning' },
+}
+
 export const PEDIDOS_DETALHE_MOCK: Record<string, VendaDetalheMock> = {
   '1': {
-    ...PEDIDOS_MOCK[0],
+    ...findById('1'),
     observacao: 'Cliente solicitou embrulho para presente.',
     items: [
       { id: 'i1', productName: 'Ração Golden Adulto 15kg', sku: 'RAC-GLD-15', quantidade: 1, precoUnitarioCentavos: 12900, descontoItemCentavos: 0, totalCentavos: 12900 },
@@ -276,7 +294,7 @@ export const PEDIDOS_DETALHE_MOCK: Record<string, VendaDetalheMock> = {
     ],
   },
   '2': {
-    ...PEDIDOS_MOCK[1],
+    ...findById('2'),
     observacao: null,
     items: [
       { id: 'i4', productName: 'Ração Hills Filhote 3kg', sku: 'RAC-HLS-3', quantidade: 3, precoUnitarioCentavos: 8900, descontoItemCentavos: 0, totalCentavos: 26700 },
@@ -287,7 +305,7 @@ export const PEDIDOS_DETALHE_MOCK: Record<string, VendaDetalheMock> = {
     ],
   },
   '3': {
-    ...PEDIDOS_MOCK[2],
+    ...findById('3'),
     observacao: null,
     items: [
       { id: 'i6', productName: 'Areia Sanitária Premium 4kg', sku: 'ACE-ARN-4', quantidade: 1, precoUnitarioCentavos: 5500, descontoItemCentavos: 0, totalCentavos: 5500 },
@@ -295,7 +313,7 @@ export const PEDIDOS_DETALHE_MOCK: Record<string, VendaDetalheMock> = {
     payments: [],
   },
   '7': {
-    ...PEDIDOS_MOCK[6],
+    ...findById('7'),
     observacao: 'Entrega expressa solicitada.',
     items: [
       { id: 'i7', productName: 'Ração Royal Canin Gato 7.5kg', sku: 'RAC-RCG-75', quantidade: 2, precoUnitarioCentavos: 14900, descontoItemCentavos: 0, totalCentavos: 29800 },

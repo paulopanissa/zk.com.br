@@ -8,21 +8,9 @@ import {
   PEDIDOS_DETALHE_MOCK,
   formatBRL,
   formatPaymentMethod,
-  type VendaStatus,
-  type VendaOrigem,
+  STATUS_CONFIG,
+  ORIGEM_CONFIG,
 } from '@/data/pedidos.mock'
-
-const STATUS_CONFIG: Record<VendaStatus, { label: string; className: string }> = {
-  ABERTA:     { label: 'Aberta',     className: 'border-blue-300/40 bg-blue-50 text-blue-700' },
-  FINALIZADA: { label: 'Finalizada', className: 'border-success/40 bg-success/10 text-success' },
-  CANCELADA:  { label: 'Cancelada',  className: 'border-destructive/40 bg-destructive/10 text-destructive' },
-}
-
-const ORIGEM_CONFIG: Record<VendaOrigem, { label: string; className: string }> = {
-  PDV:         { label: 'PDV',         className: 'border-primary/40 bg-primary/10 text-primary' },
-  ECOMMERCE:   { label: 'E-commerce',  className: 'border-purple-300/40 bg-purple-50 text-purple-700' },
-  PDV_OFFLINE: { label: 'PDV Offline', className: 'border-warning/40 bg-warning/10 text-warning' },
-}
 
 function SectionCard({ title, icon: Icon, children }: { title: string; icon: React.ElementType; children: React.ReactNode }) {
   return (
@@ -45,7 +33,7 @@ function formatDateTime(iso: string | null) {
 }
 
 export function PedidoDetalhe() {
-  const { id } = useParams<{ id: string }>()
+  const { id } = useParams<{ id: string | undefined }>()
   const navigate = useNavigate()
 
   const base = PEDIDOS_MOCK.find((p) => p.id === id)

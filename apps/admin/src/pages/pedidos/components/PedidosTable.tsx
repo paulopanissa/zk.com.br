@@ -2,23 +2,11 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useNavigate } from 'react-router-dom'
-import { type VendaMock, type VendaStatus, type VendaOrigem, formatBRL } from '@/data/pedidos.mock'
+import { type VendaMock, formatBRL, STATUS_CONFIG, ORIGEM_CONFIG } from '@/data/pedidos.mock'
 
 function formatDateShort(iso: string) {
   const d = new Date(iso)
   return d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-}
-
-const STATUS_CONFIG: Record<VendaStatus, { label: string; className: string }> = {
-  ABERTA:     { label: 'Aberta',     className: 'border-blue-300/40 bg-blue-50 text-blue-700 dark:text-blue-400' },
-  FINALIZADA: { label: 'Finalizada', className: 'border-success/40 bg-success/10 text-success' },
-  CANCELADA:  { label: 'Cancelada',  className: 'border-destructive/40 bg-destructive/10 text-destructive' },
-}
-
-const ORIGEM_CONFIG: Record<VendaOrigem, { label: string; className: string }> = {
-  PDV:         { label: 'PDV',         className: 'border-primary/40 bg-primary/10 text-primary' },
-  ECOMMERCE:   { label: 'E-commerce',  className: 'border-purple-300/40 bg-purple-50 text-purple-700 dark:text-purple-400' },
-  PDV_OFFLINE: { label: 'PDV Offline', className: 'border-warning/40 bg-warning/10 text-warning' },
 }
 
 interface PedidosTableProps {
