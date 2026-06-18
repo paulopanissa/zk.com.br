@@ -1,7 +1,8 @@
-import { Trash2, Minus, Plus, ShoppingCart } from 'lucide-react'
+import { Trash2, Minus, Plus, ShoppingCart, Tag } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { cn } from '@/lib/utils'
-import { formatBRL } from '@/data/produtos.mock'
+import { Input } from '@/components/ui/input'
+import { cn, formatBRL } from '@/lib/utils'
+import type { DescontoTipo } from '../VendaScreen'
 
 export interface CartItem {
   id: string
@@ -14,14 +15,31 @@ export interface CartItem {
 
 interface CarrinhoProps {
   items: CartItem[]
+  subtotalCentavos: number
   onUpdateQty: (id: string, delta: number) => void
   onRemove: (id: string) => void
   onFinalizar: () => void
+  descontoTipo: DescontoTipo
+  descontoInput: string
+  descontoCentavos: number
+  onDescontoTipoChange: (tipo: DescontoTipo) => void
+  onDescontoInputChange: (value: string) => void
 }
 
-export function Carrinho({ items, onUpdateQty, onRemove, onFinalizar }: CarrinhoProps) {
-  const subtotalCentavos = items.reduce((acc, i) => acc + i.precoCentavos * i.quantidade, 0)
+export function Carrinho({
+  items,
+  subtotalCentavos,
+  onUpdateQty,
+  onRemove,
+  onFinalizar,
+  descontoTipo,
+  descontoInput,
+  descontoCentavos,
+  onDescontoTipoChange,
+  onDescontoInputChange,
+}: CarrinhoProps) {
   const totalItens = items.reduce((acc, i) => acc + i.quantidade, 0)
+  const totalCentavos = subtotalCentavos - descontoCentavos
 
   return (
     <div className="flex h-full flex-col border-l border-border bg-card">
@@ -100,16 +118,76 @@ export function Carrinho({ items, onUpdateQty, onRemove, onFinalizar }: Carrinho
         )}
       </div>
 
-      {/* Footer com totais + botão */}
+      {/* Footer com totais + desconto + botão */}
       <div className="shrink-0 border-t border-border bg-muted/5 px-4 pt-3 pb-4 space-y-3">
         <div className="space-y-1.5">
-          <div className="flex justify-between text-sm text-muted-foreground">
-            <span>Subtotal</span>
-            <span className="tabular-nums">{formatBRL(subtotalCentavos)}</span>
-          </div>
+          {/* Subtotal — só mostra quando há desconto */}
+          {descontoCentavos > 0 && (
+            <div className="flex justify-between text-sm text-muted-foreground">
+              <span>Subtotal</span>
+              <span className="tabular-nums">{formatBRL(subtotalCentavos)}</span>
+            </div>
+          )}
+
+          {/* Campo de desconto (só quando carrinho não está vazio) */}
+          {items.length > 0 && (
+            <div className="flex items-center gap-2">
+              <label htmlFor="desconto-input" className="flex items-center gap-1 shrink-0">
+                <Tag className="h-3.5 w-3.5 text-muted-foreground" />
+                <span className="text-sm text-muted-foreground">Desconto</span>
+              </label>
+              <div className="flex flex-1 items-center gap-1 min-w-0">
+                {/* Toggle % / R$ */}
+                <div className="flex rounded-md border border-border overflow-hidden shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => onDescontoTipoChange('percent')}
+                    className={cn(
+                      'px-2 py-0.5 text-xs font-semibold transition-colors',
+                      descontoTipo === 'percent'
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-background text-muted-foreground hover:bg-accent',
+                    )}
+                  >
+                    %
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onDescontoTipoChange('valor')}
+                    className={cn(
+                      'px-2 py-0.5 text-xs font-semibold transition-colors border-l border-border',
+                      descontoTipo === 'valor'
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-background text-muted-foreground hover:bg-accent',
+                    )}
+                  >
+                    R$
+                  </button>
+                </div>
+
+                <Input
+                  id="desconto-input"
+                  type="text"
+                  inputMode="decimal"
+                  placeholder={descontoTipo === 'percent' ? '0' : '0,00'}
+                  value={descontoInput}
+                  onChange={(e) => onDescontoInputChange(e.target.value)}
+                  className="h-7 text-sm text-right tabular-nums px-2 min-w-0"
+                />
+
+                {descontoCentavos > 0 && (
+                  <span className="text-sm tabular-nums text-destructive shrink-0 font-medium">
+                    −{formatBRL(descontoCentavos)}
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Total */}
           <div className="flex justify-between text-base font-bold text-foreground">
             <span>Total</span>
-            <span className="tabular-nums text-primary">{formatBRL(subtotalCentavos)}</span>
+            <span className="tabular-nums text-primary">{formatBRL(totalCentavos)}</span>
           </div>
         </div>
 
