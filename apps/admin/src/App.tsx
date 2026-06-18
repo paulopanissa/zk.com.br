@@ -8,6 +8,8 @@ import { ClientesPage } from '@/pages/clientes/ClientesPage'
 import { ClienteDetalhe } from '@/pages/clientes/ClienteDetalhe'
 import { CuponsPage } from '@/pages/cupons/CuponsPage'
 import { EstoquePage } from '@/pages/estoque/EstoquePage'
+import { PedidosPage } from '@/pages/pedidos/PedidosPage'
+import { PedidoDetalhe } from '@/pages/pedidos/PedidoDetalhe'
 
 export default function App() {
   return (
@@ -22,6 +24,8 @@ export default function App() {
           <Route path="/clientes/:id" element={<ClienteDetalhe />} />
           <Route path="/cupons" element={<CuponsPage />} />
           <Route path="/estoque" element={<EstoquePage />} />
+          <Route path="/pedidos" element={<PedidosPage />} />
+          <Route path="/pedidos/:id" element={<PedidoDetalhe />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </AdminShell>
