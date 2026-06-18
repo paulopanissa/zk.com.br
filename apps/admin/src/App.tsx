@@ -13,6 +13,8 @@ import { CuponsPage } from '@/pages/cupons/CuponsPage'
 import { EstoquePage } from '@/pages/estoque/EstoquePage'
 import { PedidosPage } from '@/pages/pedidos/PedidosPage'
 import { PedidoDetalhe } from '@/pages/pedidos/PedidoDetalhe'
+import { CategoriasPage } from '@/pages/categorias/CategoriasPage'
+import { MarcasPage } from '@/pages/marcas/MarcasPage'
 
 function AppRoutes() {
   return (
@@ -34,6 +36,8 @@ function AppRoutes() {
                 <Route path="/estoque" element={<EstoquePage />} />
                 <Route path="/pedidos" element={<PedidosPage />} />
                 <Route path="/pedidos/:id" element={<PedidoDetalhe />} />
+                <Route path="/categorias" element={<CategoriasPage />} />
+                <Route path="/marcas" element={<MarcasPage />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </AdminShell>

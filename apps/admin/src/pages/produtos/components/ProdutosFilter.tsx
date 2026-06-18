@@ -12,16 +12,21 @@ import { cn } from '@/lib/utils'
 
 export interface ProdutosFiltros {
   busca: string
-  categoria: string
-  marca: string
+  categoria: string   // category_id or 'all'
+  marca: string       // brand_id or 'all'
   somenteAtivos: boolean
   destaque: boolean
 }
 
+export interface NamedItem {
+  id: string
+  name: string
+}
+
 interface ProdutosFilterProps {
   filtros: ProdutosFiltros
-  categorias: string[]
-  marcas: string[]
+  categorias: NamedItem[]
+  marcas: NamedItem[]
   onChange: (filtros: ProdutosFiltros) => void
 }
 
@@ -62,14 +67,14 @@ export function ProdutosFilter({
 
         {/* Categoria */}
         <Select value={filtros.categoria} onValueChange={(v) => set('categoria', v)}>
-          <SelectTrigger className="w-[160px]">
+          <SelectTrigger className="w-[180px]">
             <SelectValue placeholder="Categoria" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todas as categorias</SelectItem>
             {categorias.map((c) => (
-              <SelectItem key={c} value={c}>
-                {c}
+              <SelectItem key={c.id} value={c.id}>
+                {c.name}
               </SelectItem>
             ))}
           </SelectContent>
@@ -77,14 +82,14 @@ export function ProdutosFilter({
 
         {/* Marca */}
         <Select value={filtros.marca} onValueChange={(v) => set('marca', v)}>
-          <SelectTrigger className="w-[140px]">
+          <SelectTrigger className="w-[160px]">
             <SelectValue placeholder="Marca" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todas as marcas</SelectItem>
             {marcas.map((m) => (
-              <SelectItem key={m} value={m}>
-                {m}
+              <SelectItem key={m.id} value={m.id}>
+                {m.name}
               </SelectItem>
             ))}
           </SelectContent>

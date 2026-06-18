@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { ProdutosFilter, type ProdutosFiltros } from './components/ProdutosFilter'
+import { ProdutosFilter, type ProdutosFiltros, type NamedItem } from './components/ProdutosFilter'
 import { ProdutosTable } from './components/ProdutosTable'
 import { api } from '@/lib/api'
 import { type ProdutoMock } from '@/data/produtos.mock'
@@ -26,6 +26,17 @@ interface ApiListResponse {
   total: number
   page: number
   limit: number
+}
+
+interface CategoryFlat {
+  id: string
+  name: string
+  depth: number
+}
+
+interface BrandPage {
+  data: { id: string; name: string }[]
+  total: number
 }
 
 function toMock(p: ApiProduct): ProdutoMock {
@@ -58,13 +69,29 @@ export function ProdutosPage() {
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [categorias, setCategorias] = useState<NamedItem[]>([])
+  const [marcas, setMarcas] = useState<NamedItem[]>([])
 
+  // Load filter options once
+  useEffect(() => {
+    api.get<CategoryFlat[]>('/categories/flat').then((r) =>
+      setCategorias(r.data.map((c) => ({ id: c.id, name: c.name })))
+    ).catch(() => {})
+
+    api.get<BrandPage>('/brands', { params: { limit: 100 } }).then((r) =>
+      setMarcas(r.data.data.map((b) => ({ id: b.id, name: b.name })))
+    ).catch(() => {})
+  }, [])
+
+  // Load products on filter/page change
   useEffect(() => {
     setLoading(true)
     setError(null)
 
     const params: Record<string, string | number | boolean> = { page, limit: LIMIT }
     if (filtros.busca) params.name = filtros.busca
+    if (filtros.categoria !== 'all') params.category_id = filtros.categoria
+    if (filtros.marca !== 'all') params.brand_id = filtros.marca
     if (filtros.somenteAtivos) params.active = true
     if (filtros.destaque) params.featured = true
 
@@ -85,7 +112,6 @@ export function ProdutosPage() {
 
   return (
     <div className="p-6 space-y-5">
-      {/* Cabeçalho */}
       <div className="flex items-center justify-between">
         <h1 className="font-display text-3xl font-bold text-foreground">Produtos</h1>
         <Button className="bg-primary text-primary-foreground hover:bg-primary/90 gap-2">
@@ -94,11 +120,10 @@ export function ProdutosPage() {
         </Button>
       </div>
 
-      {/* Filtros — categoria/marca still use mock values; will be API-driven in a future iteration */}
       <ProdutosFilter
         filtros={filtros}
-        categorias={[]}
-        marcas={[]}
+        categorias={categorias}
+        marcas={marcas}
         onChange={handleFiltrosChange}
       />
 
