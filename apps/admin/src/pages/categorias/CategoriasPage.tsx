@@ -92,17 +92,16 @@ export function CategoriasPage() {
     if (!form.name.trim()) { setFormError('Nome é obrigatório.'); return }
     setSaving(true)
     setFormError(null)
-    const body = {
+    const base = {
       name: form.name.trim(),
       parent_id: form.parent_id === 'none' ? undefined : form.parent_id,
       description: form.description.trim() || undefined,
-      active: form.active,
     }
     try {
       if (modal?.mode === 'create') {
-        await api.post('/categories', body)
+        await api.post('/categories', base)
       } else if (modal?.mode === 'edit') {
-        await api.patch(`/categories/${modal.cat.id}`, body)
+        await api.patch(`/categories/${modal.cat.id}`, { ...base, active: form.active })
       }
       setModal(null)
       load()
