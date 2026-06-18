@@ -32,7 +32,7 @@ export function DatePicker({
         onValueChange?.(v)
       }}
     >
-      <ArkDatePicker.Control className={cn('flex items-center rounded-md border border-input bg-background', className)}>
+      <ArkDatePicker.Control className={cn('flex items-center overflow-hidden rounded-md border border-input bg-background', className)}>
         <ArkDatePicker.Input
           placeholder={placeholder}
           className="h-9 flex-1 bg-transparent px-3 text-sm focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
