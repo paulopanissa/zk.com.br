@@ -3,6 +3,7 @@ import { ProdutoGrid } from './components/ProdutoGrid'
 import { Carrinho, type CartItem } from './components/Carrinho'
 import { PagamentoModal, type MetodoPagamento } from './components/PagamentoModal'
 import { type ProdutoPDV } from '@/data/produtos.mock'
+import { parseBRLInput } from '@/lib/utils'
 
 export type DescontoTipo = 'percent' | 'valor'
 
@@ -54,12 +55,15 @@ export function VendaScreen() {
 
   const subtotalCentavos = cart.reduce((acc, i) => acc + i.precoCentavos * i.quantidade, 0)
 
-  const descontoValorRaw = parseFloat(descontoInput || '0')
   const descontoCentavos = cart.length === 0
     ? 0
     : descontoTipo === 'percent'
-      ? Math.round(subtotalCentavos * Math.min(Math.max(0, descontoValorRaw), 100) / 100)
-      : Math.min(Math.max(0, Math.round(descontoValorRaw * 100)), subtotalCentavos)
+      ? Math.round(
+          subtotalCentavos *
+            Math.min(Math.max(0, parseFloat(descontoInput.replace(',', '.') || '0')), 100) /
+            100,
+        )
+      : Math.min(Math.max(0, parseBRLInput(descontoInput)), subtotalCentavos)
 
   const totalCentavos = subtotalCentavos - descontoCentavos
 
@@ -68,6 +72,7 @@ export function VendaScreen() {
     setTimeout(() => {
       setCart([])
       setDescontoInput('')
+      setDescontoTipo('percent')
       setShowPagamento(false)
     }, 1400)
   }
@@ -83,6 +88,7 @@ export function VendaScreen() {
       <div className="w-80 shrink-0 xl:w-96">
         <Carrinho
           items={cart}
+          subtotalCentavos={subtotalCentavos}
           onUpdateQty={handleUpdateQty}
           onRemove={handleRemove}
           onFinalizar={() => setShowPagamento(true)}

@@ -15,6 +15,7 @@ export interface CartItem {
 
 interface CarrinhoProps {
   items: CartItem[]
+  subtotalCentavos: number
   onUpdateQty: (id: string, delta: number) => void
   onRemove: (id: string) => void
   onFinalizar: () => void
@@ -27,6 +28,7 @@ interface CarrinhoProps {
 
 export function Carrinho({
   items,
+  subtotalCentavos,
   onUpdateQty,
   onRemove,
   onFinalizar,
@@ -36,7 +38,6 @@ export function Carrinho({
   onDescontoTipoChange,
   onDescontoInputChange,
 }: CarrinhoProps) {
-  const subtotalCentavos = items.reduce((acc, i) => acc + i.precoCentavos * i.quantidade, 0)
   const totalItens = items.reduce((acc, i) => acc + i.quantidade, 0)
   const totalCentavos = subtotalCentavos - descontoCentavos
 
@@ -131,10 +132,10 @@ export function Carrinho({
           {/* Campo de desconto (só quando carrinho não está vazio) */}
           {items.length > 0 && (
             <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1">
-                <Tag className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+              <label htmlFor="desconto-input" className="flex items-center gap-1 shrink-0">
+                <Tag className="h-3.5 w-3.5 text-muted-foreground" />
                 <span className="text-sm text-muted-foreground">Desconto</span>
-              </div>
+              </label>
               <div className="flex flex-1 items-center gap-1 min-w-0">
                 {/* Toggle % / R$ */}
                 <div className="flex rounded-md border border-border overflow-hidden shrink-0">
@@ -165,6 +166,7 @@ export function Carrinho({
                 </div>
 
                 <Input
+                  id="desconto-input"
                   type="text"
                   inputMode="decimal"
                   placeholder={descontoTipo === 'percent' ? '0' : '0,00'}
