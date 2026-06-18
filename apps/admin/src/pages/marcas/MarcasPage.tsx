@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Edit2, Plus, Trash2, Upload, X } from 'lucide-react'
+import { FileUpload } from '@ark-ui/react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -35,12 +36,13 @@ interface FormState {
   logo_url: string
   logoFile: File | null
   logoPreview: string | null
+  logoRemoved: boolean
 }
 
 const LIMIT = 20
 
 function buildInitialForm(): FormState {
-  return { name: '', active: true, logo_url: '', logoFile: null, logoPreview: null }
+  return { name: '', active: true, logo_url: '', logoFile: null, logoPreview: null, logoRemoved: false }
 }
 
 export function MarcasPage() {
@@ -53,7 +55,7 @@ export function MarcasPage() {
   const [form, setForm] = useState<FormState>(buildInitialForm())
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [fileUploadKey, setFileUploadKey] = useState(0)
 
   const load = useCallback((p = page) => {
     setLoading(true)
@@ -70,6 +72,7 @@ export function MarcasPage() {
   function openCreate() {
     setForm(buildInitialForm())
     setFormError(null)
+    setFileUploadKey((k) => k + 1)
     setModal({ mode: 'create' })
   }
 
@@ -80,24 +83,26 @@ export function MarcasPage() {
       logo_url: brand.logo_url ?? '',
       logoFile: null,
       logoPreview: brand.logo_url ?? null,
+      logoRemoved: false,
     })
     setFormError(null)
+    setFileUploadKey((k) => k + 1)
     setModal({ mode: 'edit', brand })
   }
 
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
+  function handleFileAccept(details: { files: File[] }) {
+    const file = details.files[0]
     if (!file) return
     const preview = URL.createObjectURL(file)
-    setForm((p) => ({ ...p, logoFile: file, logoPreview: preview, logo_url: '' }))
+    setForm((p) => ({ ...p, logoFile: file, logoPreview: preview, logo_url: '', logoRemoved: false }))
   }
 
   function clearLogo() {
     if (form.logoPreview && form.logoFile) {
       URL.revokeObjectURL(form.logoPreview)
     }
-    setForm((p) => ({ ...p, logoFile: null, logoPreview: null, logo_url: '' }))
-    if (fileInputRef.current) fileInputRef.current.value = ''
+    setForm((p) => ({ ...p, logoFile: null, logoPreview: null, logo_url: '', logoRemoved: true }))
+    setFileUploadKey((k) => k + 1)
   }
 
   async function handleSave() {
@@ -123,7 +128,12 @@ export function MarcasPage() {
         await api.patch<Brand>(`/brands/${brandId}`, body)
       }
 
-      // Upload file after brand is created/saved
+      // If logo was explicitly removed, delete from R2
+      if (modal?.mode === 'edit' && form.logoRemoved && modal.brand.logo_url) {
+        await api.delete(`/brands/${brandId}/logo`).catch(() => {})
+      }
+
+      // Upload new file if provided
       if (form.logoFile) {
         const fd = new FormData()
         fd.append('logo', form.logoFile)
@@ -191,7 +201,7 @@ export function MarcasPage() {
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-text-strong">Marca</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-text-strong">Slug</th>
                 <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide text-text-strong">Status</th>
-                <th className="px-4 py-3 w-24" />
+                <th className="px-4 py-3 w-28" />
               </tr>
             </thead>
             <tbody>
@@ -248,6 +258,7 @@ export function MarcasPage() {
         </div>
       )}
 
+      {/* Brand create/edit modal */}
       <Dialog open={modal !== null} onOpenChange={(open) => { if (!open) setModal(null) }}>
         <DialogContent className="sm:max-w-sm" onInteractOutside={(e) => e.preventDefault()}>
           <DialogHeader>
@@ -270,55 +281,69 @@ export function MarcasPage() {
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-foreground">Logotipo</label>
 
-              {/* Preview */}
-              {form.logoPreview && (
-                <div className="relative inline-flex">
-                  <img
-                    src={form.logoPreview}
-                    alt="Preview"
-                    className="h-16 w-16 rounded-lg border border-border object-contain bg-surface-alt"
-                  />
-                  <button
-                    type="button"
-                    onClick={clearLogo}
-                    className="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-destructive-foreground hover:bg-destructive/80 transition-colors"
+              {form.logoPreview ? (
+                <div className="space-y-2">
+                  <div className="relative inline-flex">
+                    <img
+                      src={form.logoPreview}
+                      alt="Preview"
+                      className="h-16 w-16 rounded-lg border border-border object-contain bg-surface-alt"
+                    />
+                    <button
+                      type="button"
+                      onClick={clearLogo}
+                      className="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-destructive-foreground hover:bg-destructive/80 transition-colors"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                  <FileUpload.Root
+                    key={fileUploadKey}
+                    maxFiles={1}
+                    maxFileSize={2 * 1024 * 1024}
+                    accept={{ 'image/*': ['.png', '.jpg', '.jpeg', '.webp', '.svg'] }}
+                    onFileAccept={handleFileAccept}
                   >
-                    <X className="h-3 w-3" />
-                  </button>
+                    <FileUpload.Trigger asChild>
+                      <Button type="button" variant="outline" size="sm" className="gap-1.5 text-xs">
+                        <Upload className="h-3.5 w-3.5" />
+                        Trocar arquivo
+                      </Button>
+                    </FileUpload.Trigger>
+                    <FileUpload.HiddenInput />
+                  </FileUpload.Root>
                 </div>
-              )}
-
-              {/* Upload file */}
-              <div className="flex items-center gap-2">
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".png,.jpg,.jpeg,.webp,.svg,image/png,image/jpeg,image/webp,image/svg+xml"
-                  onChange={handleFileChange}
-                  className="hidden"
-                  id="brand-logo-file"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="gap-1.5 text-xs"
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  <Upload className="h-3.5 w-3.5" />
-                  {form.logoFile ? 'Trocar arquivo' : 'Upload arquivo'}
-                </Button>
-                <span className="text-xs text-muted-foreground">PNG, SVG, JPG, WebP · máx 2 MB</span>
-              </div>
-
-              {/* Or URL */}
-              {!form.logoFile && (
-                <Input
-                  value={form.logo_url}
-                  onChange={(e) => setForm((p) => ({ ...p, logo_url: e.target.value, logoPreview: e.target.value || null }))}
-                  placeholder="ou cole uma URL (https://...)"
-                  className="text-sm"
-                />
+              ) : (
+                <div className="space-y-2">
+                  <FileUpload.Root
+                    key={fileUploadKey}
+                    maxFiles={1}
+                    maxFileSize={2 * 1024 * 1024}
+                    accept={{ 'image/*': ['.png', '.jpg', '.jpeg', '.webp', '.svg'] }}
+                    onFileAccept={handleFileAccept}
+                  >
+                    <FileUpload.Dropzone className="flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-border p-5 text-center cursor-pointer transition-colors hover:bg-surface-alt/60 data-[dragging]:border-brand-orange data-[dragging]:bg-brand-orange/5">
+                      <Upload className="h-5 w-5 text-muted-foreground" />
+                      <div>
+                        <FileUpload.Label className="text-sm font-medium text-foreground cursor-pointer">
+                          Arraste aqui ou{' '}
+                          <FileUpload.Trigger asChild>
+                            <span className="text-brand-orange underline-offset-2 hover:underline cursor-pointer">clique para selecionar</span>
+                          </FileUpload.Trigger>
+                        </FileUpload.Label>
+                        <p className="text-xs text-muted-foreground mt-0.5">PNG, SVG, JPG, WebP · máx 2 MB</p>
+                      </div>
+                    </FileUpload.Dropzone>
+                    <FileUpload.HiddenInput />
+                  </FileUpload.Root>
+                  {/* URL input when no file */}
+                  <Input
+                    value={form.logo_url}
+                    onChange={(e) => setForm((p) => ({ ...p, logo_url: e.target.value, logoPreview: e.target.value || null }))}
+                    placeholder="ou cole uma URL (https://...)"
+                    className="text-sm"
+                  />
+                </div>
               )}
             </div>
 
@@ -349,6 +374,7 @@ export function MarcasPage() {
           </div>
         </DialogContent>
       </Dialog>
+
     </div>
   )
 }
