@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react'
-import { Edit2, Plus, Trash2 } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { Edit2, Plus, Trash2, Upload, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -16,6 +16,7 @@ interface Brand {
   id: string
   name: string
   slug: string
+  logo_url: string | null
   active: boolean
 }
 
@@ -31,9 +32,16 @@ type ModalState = null | { mode: 'create' } | { mode: 'edit'; brand: Brand }
 interface FormState {
   name: string
   active: boolean
+  logo_url: string
+  logoFile: File | null
+  logoPreview: string | null
 }
 
 const LIMIT = 20
+
+function buildInitialForm(): FormState {
+  return { name: '', active: true, logo_url: '', logoFile: null, logoPreview: null }
+}
 
 export function MarcasPage() {
   const [brands, setBrands] = useState<Brand[]>([])
@@ -42,9 +50,10 @@ export function MarcasPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [modal, setModal] = useState<ModalState>(null)
-  const [form, setForm] = useState<FormState>({ name: '', active: true })
+  const [form, setForm] = useState<FormState>(buildInitialForm())
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const load = useCallback((p = page) => {
     setLoading(true)
@@ -59,33 +68,76 @@ export function MarcasPage() {
   useEffect(() => { load() }, [load])
 
   function openCreate() {
-    setForm({ name: '', active: true })
+    setForm(buildInitialForm())
     setFormError(null)
     setModal({ mode: 'create' })
   }
 
   function openEdit(brand: Brand) {
-    setForm({ name: brand.name, active: brand.active })
+    setForm({
+      name: brand.name,
+      active: brand.active,
+      logo_url: brand.logo_url ?? '',
+      logoFile: null,
+      logoPreview: brand.logo_url ?? null,
+    })
     setFormError(null)
     setModal({ mode: 'edit', brand })
+  }
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const preview = URL.createObjectURL(file)
+    setForm((p) => ({ ...p, logoFile: file, logoPreview: preview, logo_url: '' }))
+  }
+
+  function clearLogo() {
+    if (form.logoPreview && form.logoFile) {
+      URL.revokeObjectURL(form.logoPreview)
+    }
+    setForm((p) => ({ ...p, logoFile: null, logoPreview: null, logo_url: '' }))
+    if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
   async function handleSave() {
     if (!form.name.trim()) { setFormError('Nome é obrigatório.'); return }
     setSaving(true)
     setFormError(null)
-    const body = { name: form.name.trim(), active: form.active }
+
     try {
+      let brandId: string
+
       if (modal?.mode === 'create') {
-        await api.post('/brands', { name: body.name })
-      } else if (modal?.mode === 'edit') {
-        await api.patch(`/brands/${modal.brand.id}`, body)
+        const body: { name: string; logo_url?: string } = { name: form.name.trim() }
+        if (form.logo_url.trim()) body.logo_url = form.logo_url.trim()
+        const res = await api.post<Brand>('/brands', body)
+        brandId = res.data.id
+      } else {
+        brandId = modal!.brand.id
+        const body: { name?: string; active?: boolean; logo_url?: string } = {
+          name: form.name.trim(),
+          active: form.active,
+        }
+        if (form.logo_url.trim()) body.logo_url = form.logo_url.trim()
+        await api.patch<Brand>(`/brands/${brandId}`, body)
       }
+
+      // Upload file after brand is created/saved
+      if (form.logoFile) {
+        const fd = new FormData()
+        fd.append('logo', form.logoFile)
+        await api.post(`/brands/${brandId}/logo`, fd, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        })
+      }
+
       setModal(null)
       load(page)
     } catch (e: unknown) {
-      const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
-      setFormError(typeof msg === 'string' ? msg : 'Erro ao salvar. Tente novamente.')
+      const msg = (e as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message
+      const text = Array.isArray(msg) ? msg[0] : msg
+      setFormError(typeof text === 'string' ? text : 'Erro ao salvar. Tente novamente.')
     } finally {
       setSaving(false)
     }
@@ -151,7 +203,12 @@ export function MarcasPage() {
                     i % 2 === 1 && 'bg-surface-alt/30',
                   )}
                 >
-                  <td className="px-4 py-3 font-medium text-foreground">{brand.name}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      <LogoThumb url={brand.logo_url} name={brand.name} />
+                      <span className="font-medium text-foreground">{brand.name}</span>
+                    </div>
+                  </td>
                   <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{brand.slug}</td>
                   <td className="px-4 py-3 text-center">
                     <Badge
@@ -197,6 +254,7 @@ export function MarcasPage() {
             <DialogTitle>{modal?.mode === 'create' ? 'Nova marca' : 'Editar marca'}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 pt-2">
+            {/* Nome */}
             <div className="space-y-1.5">
               <label htmlFor="brand-name" className="text-sm font-medium text-foreground">Nome *</label>
               <Input
@@ -208,6 +266,63 @@ export function MarcasPage() {
               />
             </div>
 
+            {/* Logo */}
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-foreground">Logotipo</label>
+
+              {/* Preview */}
+              {form.logoPreview && (
+                <div className="relative inline-flex">
+                  <img
+                    src={form.logoPreview}
+                    alt="Preview"
+                    className="h-16 w-16 rounded-lg border border-border object-contain bg-surface-alt"
+                  />
+                  <button
+                    type="button"
+                    onClick={clearLogo}
+                    className="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-destructive-foreground hover:bg-destructive/80 transition-colors"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              )}
+
+              {/* Upload file */}
+              <div className="flex items-center gap-2">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".png,.jpg,.jpeg,.webp,.svg,image/png,image/jpeg,image/webp,image/svg+xml"
+                  onChange={handleFileChange}
+                  className="hidden"
+                  id="brand-logo-file"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5 text-xs"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <Upload className="h-3.5 w-3.5" />
+                  {form.logoFile ? 'Trocar arquivo' : 'Upload arquivo'}
+                </Button>
+                <span className="text-xs text-muted-foreground">PNG, SVG, JPG, WebP · máx 2 MB</span>
+              </div>
+
+              {/* Or URL */}
+              {!form.logoFile && (
+                <Input
+                  value={form.logo_url}
+                  onChange={(e) => setForm((p) => ({ ...p, logo_url: e.target.value, logoPreview: e.target.value || null }))}
+                  placeholder="ou cole uma URL (https://...)"
+                  className="text-sm"
+                />
+              )}
+            </div>
+
+            {/* Active toggle (edit only) */}
             {modal?.mode === 'edit' && (
               <div className="flex items-center gap-3">
                 <input
@@ -234,6 +349,24 @@ export function MarcasPage() {
           </div>
         </DialogContent>
       </Dialog>
+    </div>
+  )
+}
+
+function LogoThumb({ url, name }: { url: string | null; name: string }) {
+  if (url) {
+    return (
+      <img
+        src={url}
+        alt={name}
+        className="h-8 w-8 rounded-md border border-border object-contain bg-surface-alt shrink-0"
+        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+      />
+    )
+  }
+  return (
+    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-surface-alt border border-border text-xs font-semibold text-muted-foreground">
+      {name.slice(0, 2).toUpperCase()}
     </div>
   )
 }
