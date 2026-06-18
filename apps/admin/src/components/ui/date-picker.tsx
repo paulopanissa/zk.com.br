@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { DatePicker as ArkDatePicker, parseDate, Portal } from '@ark-ui/react'
 import { Calendar, ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -20,12 +21,15 @@ export function DatePicker({
   onValueChange,
 }: DatePickerProps) {
   const parsedValue = value ? [parseDate(value)] : undefined
+  const [open, setOpen] = useState(false)
 
   return (
     <ArkDatePicker.Root
       id={id}
       value={parsedValue}
       disabled={disabled}
+      open={open}
+      onOpenChange={({ open: o }) => setOpen(o)}
       positioning={{ strategy: 'fixed' }}
       onValueChange={(details) => {
         const v = details.value[0]?.toString()
@@ -35,6 +39,7 @@ export function DatePicker({
       <ArkDatePicker.Control className={cn('flex items-center overflow-hidden rounded-md border border-input bg-background', className)}>
         <ArkDatePicker.Input
           placeholder={placeholder}
+          onClick={() => setOpen(true)}
           className="h-9 flex-1 bg-transparent px-3 text-sm focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
         />
         <ArkDatePicker.Trigger className="flex h-9 w-9 shrink-0 items-center justify-center rounded-r-md border-l border-input text-muted-foreground hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-50">
