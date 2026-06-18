@@ -23,6 +23,7 @@ export function DatePicker({
     <ArkDatePicker.Root
       value={parsedValue}
       disabled={disabled}
+      positioning={{ strategy: 'fixed' }}
       onValueChange={(details) => {
         const v = details.valueAsString[0]
         onValueChange?.(v)
@@ -38,7 +39,7 @@ export function DatePicker({
         </ArkDatePicker.Trigger>
       </ArkDatePicker.Control>
       <Portal>
-        <ArkDatePicker.Positioner className="z-[200]">
+        <ArkDatePicker.Positioner style={{ zIndex: 9999 }}>
           <ArkDatePicker.Content className="rounded-lg border border-border bg-popover p-3 shadow-md">
             <ArkDatePicker.View view="day">
               <ArkDatePicker.Context>
