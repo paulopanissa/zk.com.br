@@ -33,12 +33,12 @@ export function DatePicker({
           placeholder={placeholder}
           className="h-9 flex-1 bg-transparent px-3 text-sm focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
         />
-        <ArkDatePicker.Trigger className="flex h-9 w-9 shrink-0 items-center justify-center border-l border-input text-muted-foreground hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-50">
+        <ArkDatePicker.Trigger className="flex h-9 w-9 shrink-0 items-center justify-center rounded-r-md border-l border-input text-muted-foreground hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-50">
           <Calendar className="h-4 w-4" />
         </ArkDatePicker.Trigger>
       </ArkDatePicker.Control>
       <Portal>
-        <ArkDatePicker.Positioner className="z-50">
+        <ArkDatePicker.Positioner className="z-[200]">
           <ArkDatePicker.Content className="rounded-lg border border-border bg-popover p-3 shadow-md">
             <ArkDatePicker.View view="day">
               <ArkDatePicker.Context>
