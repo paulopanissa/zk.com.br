@@ -66,7 +66,7 @@ export class LotsRepository {
         include: PRODUCT_SELECT,
         skip,
         take: pagination.limit,
-        orderBy: [{ created_at: 'desc' }],
+        orderBy: [{ expires_at: { sort: 'asc', nulls: 'last' } }, { created_at: 'asc' }],
       }),
       this.prisma.lot.count({ where }),
     ]);

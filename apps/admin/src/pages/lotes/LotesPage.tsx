@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import { api } from '@/lib/api'
-import { getLotStatus, LotesTable, type LotItem } from './components/LotesTable'
+import { LotesTable, type LotItem } from './components/LotesTable'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
