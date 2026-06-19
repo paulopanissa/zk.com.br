@@ -143,8 +143,8 @@ export function FornecedoresPage() {
     if (!form.razao_social.trim()) return 'Razão social é obrigatória.'
     if (form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim()))
       return 'E-mail inválido.'
-    if (form.phone.trim() && !/^\d+$/.test(form.phone.replace(/\D/g, '')))
-      return 'Telefone deve conter apenas dígitos.'
+    if (form.phone.trim() && form.phone.replace(/\D/g, '').length < 8)
+      return 'Telefone inválido (mínimo 8 dígitos).'
     return null
   }
 
@@ -159,26 +159,40 @@ export function FornecedoresPage() {
 
     const docDigits = form.document.replace(/\D/g, '')
     const phoneDigits = form.phone.replace(/\D/g, '')
+    const isEdit = modal?.mode === 'edit'
 
     const body: Record<string, unknown> = {
       document: docDigits,
       razao_social: form.razao_social.trim(),
     }
-    if (form.nome_fantasia.trim()) body.nome_fantasia = form.nome_fantasia.trim()
-    if (form.email.trim()) body.email = form.email.trim()
-    if (phoneDigits) body.phone = phoneDigits
-    if (form.website.trim()) body.website = form.website.trim()
-    if (form.notes.trim()) body.notes = form.notes.trim()
-    if (modal?.mode === 'edit') body.active = form.active
+
+    if (isEdit) {
+      // In edit mode always send optional fields so user can clear them (null = clear)
+      body.nome_fantasia = form.nome_fantasia.trim() || null
+      body.email = form.email.trim() || null
+      body.phone = phoneDigits || null
+      body.website = form.website.trim() || null
+      body.notes = form.notes.trim() || null
+      body.active = form.active
+    } else {
+      if (form.nome_fantasia.trim()) body.nome_fantasia = form.nome_fantasia.trim()
+      if (form.email.trim()) body.email = form.email.trim()
+      if (phoneDigits) body.phone = phoneDigits
+      if (form.website.trim()) body.website = form.website.trim()
+      if (form.notes.trim()) body.notes = form.notes.trim()
+    }
 
     try {
-      if (modal?.mode === 'create') {
+      if (!isEdit) {
         await api.post('/suppliers', body)
+        setModal(null)
+        setPage(1)
+        load(1)
       } else {
         await api.patch(`/suppliers/${modal!.supplier.id}`, body)
+        setModal(null)
+        load(page)
       }
-      setModal(null)
-      load(page)
     } catch (e: unknown) {
       const msg = (e as { response?: { data?: { message?: string | string[] } } })?.response?.data
         ?.message
