@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   ArrowLeft,
@@ -149,11 +149,8 @@ export function NotaEntradaDetalhe() {
   const [cancelling, setCancelling] = useState(false)
 
   // PDF attach
-  const pdfInputRef = useState<HTMLInputElement | null>(null)
+  const pdfInputRef = useRef<HTMLInputElement>(null)
   const [attachingPdf, setAttachingPdf] = useState(false)
-  const setPdfInputRef = (el: HTMLInputElement | null) => {
-    pdfInputRef[0] = el
-  }
 
   // Item link sheet
   const [itemSheet, setItemSheet] = useState<{ item: NfEntradaItem } | null>(null)
@@ -410,7 +407,7 @@ export function NotaEntradaDetalhe() {
                     size="sm"
                     variant="ghost"
                     className="gap-1.5 text-brand-cream/70 hover:text-brand-cream hover:bg-white/10 border border-white/20"
-                    onClick={() => pdfInputRef[0]?.click()}
+                    onClick={() => pdfInputRef.current?.click()}
                     disabled={attachingPdf}
                   >
                     <Paperclip className="h-3.5 w-3.5" />
@@ -453,7 +450,7 @@ export function NotaEntradaDetalhe() {
 
           {/* Hidden PDF input */}
           <input
-            ref={setPdfInputRef}
+            ref={pdfInputRef}
             type="file"
             accept=".pdf"
             className="hidden"
