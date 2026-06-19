@@ -52,17 +52,17 @@ export function LoginPage() {
           </span>
         </div>
 
-        {/* Identity */}
+        {/* Identity — h2 no painel (h1 fica no form, visível em todo viewport) */}
         <div className="relative space-y-5">
-          <h1
+          <h2
             className="font-display text-[2.75rem] leading-[1.08] font-bold text-white tracking-tight"
             style={{ textWrap: 'balance' } as React.CSSProperties}
           >
             Estoque, vendas<br />
             e fiscal.<br />
             Tudo integrado.
-          </h1>
-          <p className="text-white/55 text-[0.9375rem] leading-relaxed max-w-[26ch]">
+          </h2>
+          <p className="text-white/70 text-[0.9375rem] leading-relaxed max-w-[26ch]">
             O painel completo para gerenciar sua petshop do dia a dia.
           </p>
         </div>
@@ -91,12 +91,12 @@ export function LoginPage() {
 
         <div className="w-full max-w-sm">
           <div className="mb-8">
-            <h2
+            <h1
               className="font-display text-[1.875rem] font-bold text-foreground tracking-tight"
               style={{ textWrap: 'balance' } as React.CSSProperties}
             >
               Bem-vindo de volta
-            </h2>
+            </h1>
             <p className="mt-1.5 text-sm text-muted-foreground">
               Acesse o painel com suas credenciais.
             </p>
@@ -135,7 +135,10 @@ export function LoginPage() {
             </div>
 
             {error && (
-              <div className="rounded-lg border border-destructive/20 bg-destructive/10 px-4 py-2.5 text-sm text-destructive">
+              <div
+                role="alert"
+                className="rounded-lg border border-destructive/20 bg-destructive/10 px-4 py-2.5 text-sm text-destructive"
+              >
                 {error}
               </div>
             )}
