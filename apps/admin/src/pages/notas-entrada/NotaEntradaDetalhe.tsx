@@ -1,11 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
+  AlertCircle,
   ArrowLeft,
   CheckCircle,
+  CheckCircle2,
   Edit2,
   ExternalLink,
+  FileText,
   Layers,
+  Link2,
   Paperclip,
   XCircle,
 } from 'lucide-react'
@@ -140,6 +144,7 @@ function extractApiError(e: unknown): string {
 export function NotaEntradaDetalhe() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
 
   const [nf, setNf] = useState<NfEntradaDetalhe | null>(null)
   const [loading, setLoading] = useState(true)
@@ -147,6 +152,15 @@ export function NotaEntradaDetalhe() {
   const [actionError, setActionError] = useState<string | null>(null)
   const [confirming, setConfirming] = useState(false)
   const [cancelling, setCancelling] = useState(false)
+
+  // Success banner
+  const fromSource = searchParams.get('from')
+  const [showBanner, setShowBanner] = useState(!!fromSource)
+  const successMessage = fromSource === 'xml'
+    ? 'XML importado com sucesso — revise os itens e vincule os produtos antes de confirmar.'
+    : fromSource === 'manual'
+    ? 'Nota criada — adicione os itens e vincule os produtos antes de confirmar.'
+    : null
 
   // PDF attach
   const pdfInputRef = useRef<HTMLInputElement>(null)
@@ -181,6 +195,13 @@ export function NotaEntradaDetalhe() {
   useEffect(() => {
     load()
   }, [id])
+
+  // Auto-dismiss success banner
+  useEffect(() => {
+    if (!showBanner) return
+    const t = setTimeout(() => setShowBanner(false), 6000)
+    return () => clearTimeout(t)
+  }, [showBanner])
 
   // ── Product search ─────────────────────────────────────────────────────────
 
@@ -357,6 +378,10 @@ export function NotaEntradaDetalhe() {
   }
 
   const isRascunho = nf.status === 'RASCUNHO'
+  const linkedCount = nf.items.filter((i) => i.product_id).length
+  const totalItems = nf.items.length
+  const allLinked = totalItems > 0 && linkedCount === totalItems
+  const progressPct = totalItems > 0 ? Math.round((linkedCount / totalItems) * 100) : 0
 
   return (
     <div className="p-6 space-y-5">
@@ -369,8 +394,25 @@ export function NotaEntradaDetalhe() {
         Notas de Entrada
       </button>
 
+      {/* ── Success banner ────────────────────────────────────────────────── */}
+      {showBanner && successMessage && (
+        <div
+          className="flex items-start gap-3 rounded-xl border border-brand-sage/40 bg-brand-sage/10 px-4 py-3.5 animate-in slide-in-from-top-2 fade-in duration-300"
+        >
+          <CheckCircle2 className="h-4 w-4 text-brand-sage mt-0.5 shrink-0" />
+          <p className="text-sm text-brand-brown flex-1">{successMessage}</p>
+          <button
+            onClick={() => setShowBanner(false)}
+            className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
+            aria-label="Fechar"
+          >
+            <XCircle className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
       {/* ── Header card ───────────────────────────────────────────────────── */}
-      <div className="rounded-2xl bg-brand-forest text-brand-cream overflow-hidden">
+      <div className="rounded-2xl bg-brand-forest text-brand-cream overflow-hidden animate-in slide-in-from-top-3 fade-in duration-500">
         <div className="px-7 pt-7 pb-6">
           <div className="flex items-start justify-between gap-4 flex-wrap">
             <div className="min-w-0">
@@ -496,8 +538,64 @@ export function NotaEntradaDetalhe() {
         )}
       </div>
 
+      {/* ── Workflow progress (RASCUNHO only) ────────────────────────────── */}
+      {isRascunho && totalItems > 0 && (
+        <div className="rounded-xl border bg-card shadow-sm overflow-hidden animate-in slide-in-from-bottom-2 fade-in duration-500 delay-150"
+          style={{ borderColor: allLinked ? 'oklch(var(--brand-sage) / 0.5)' : 'oklch(var(--brand-orange) / 0.3)' }}
+        >
+          <div className="px-5 py-4">
+            <div className="flex items-center justify-between gap-4 mb-3">
+              <div className="flex items-center gap-2.5">
+                {allLinked ? (
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-sage/15">
+                    <CheckCircle2 className="h-4 w-4 text-brand-sage" />
+                  </div>
+                ) : (
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-orange/15">
+                    <Link2 className="h-4 w-4 text-brand-orange" />
+                  </div>
+                )}
+                <div>
+                  <p className="text-sm font-semibold text-foreground">
+                    {allLinked ? 'Todos os itens vinculados' : 'Vincule os produtos aos itens'}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {linkedCount} de {totalItems} ite{totalItems !== 1 ? 'ns' : 'm'} com produto vinculado
+                  </p>
+                </div>
+              </div>
+              {allLinked ? (
+                <button
+                  onClick={handleConfirm}
+                  disabled={confirming}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-brand-sage px-4 py-2 text-sm font-semibold text-brand-forest transition-all hover:bg-brand-sage/90 disabled:opacity-50"
+                >
+                  <CheckCircle className="h-3.5 w-3.5" />
+                  {confirming ? 'Confirmando…' : 'Confirmar NF'}
+                </button>
+              ) : (
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <AlertCircle className="h-3.5 w-3.5 text-brand-orange" />
+                  {totalItems - linkedCount} pendente{totalItems - linkedCount !== 1 ? 's' : ''}
+                </div>
+              )}
+            </div>
+            {/* Progress bar */}
+            <div className="h-1.5 w-full rounded-full bg-surface-alt overflow-hidden">
+              <div
+                className="h-full rounded-full transition-all duration-700 ease-out"
+                style={{
+                  width: `${progressPct}%`,
+                  backgroundColor: allLinked ? 'var(--brand-sage)' : 'var(--brand-orange)',
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Items table ────────────────────────────────────────────────────── */}
-      <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
+      <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden animate-in slide-in-from-bottom-3 fade-in duration-500 delay-200">
         <div className="flex items-center justify-between px-5 py-4 border-b border-border">
           <div className="flex items-center gap-2.5">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-orange/10">
@@ -513,14 +611,18 @@ export function NotaEntradaDetalhe() {
           {isRascunho && nf.items.length > 0 && (
             <Button size="sm" variant="outline" className="gap-1.5 h-8" onClick={openBulkBrand}>
               <Layers className="h-3.5 w-3.5" />
-              Aplicar marca em lote
+              Marca em lote
             </Button>
           )}
         </div>
 
         {nf.items.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 text-center">
-            <p className="text-muted-foreground text-sm">Nenhum item nesta nota.</p>
+          <div className="flex flex-col items-center justify-center py-14 text-center gap-2">
+            <FileText className="h-9 w-9 text-muted-foreground/30" />
+            <p className="text-sm font-medium text-muted-foreground">Nenhum item nesta nota</p>
+            {isRascunho && (
+              <p className="text-xs text-muted-foreground/70">Importe um XML para adicionar itens automaticamente.</p>
+            )}
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -541,13 +643,17 @@ export function NotaEntradaDetalhe() {
                 </tr>
               </thead>
               <tbody>
-                {nf.items.map((item, i) => (
+                {nf.items.map((item, i) => {
+                  const needsLink = isRascunho && !item.product_id
+                  return (
                   <tr
                     key={item.id}
                     className={cn(
-                      'border-b border-border/50 transition-colors hover:bg-surface-alt/60',
-                      i % 2 === 1 && 'bg-surface-alt/30',
+                      'border-b border-border/50 transition-colors hover:bg-surface-alt/60 animate-in fade-in slide-in-from-bottom-1 duration-300',
+                      !needsLink && i % 2 === 1 && 'bg-surface-alt/30',
+                      needsLink && 'bg-brand-orange/5',
                     )}
+                    style={{ animationDelay: `${250 + i * 40}ms`, animationFillMode: 'both' }}
                   >
                     <td className="px-3 py-3 text-muted-foreground text-xs tabular-nums">
                       {item.numero_item}
@@ -587,7 +693,12 @@ export function NotaEntradaDetalhe() {
                     </td>
                     <td className="px-3 py-3 hidden lg:table-cell">
                       {item.product ? (
-                        <span className="text-xs text-foreground">{item.product.name}</span>
+                        <span className="text-xs text-foreground font-medium">{item.product.name}</span>
+                      ) : isRascunho ? (
+                        <span className="inline-flex items-center gap-1 text-xs text-brand-orange/80 font-medium">
+                          <AlertCircle className="h-3 w-3" />
+                          Vincular
+                        </span>
                       ) : (
                         <span className="text-xs text-muted-foreground">—</span>
                       )}
@@ -604,16 +715,22 @@ export function NotaEntradaDetalhe() {
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                          className={cn(
+                            'h-7 w-7',
+                            needsLink
+                              ? 'text-brand-orange hover:text-brand-orange/80 hover:bg-brand-orange/10'
+                              : 'text-muted-foreground hover:text-foreground',
+                          )}
                           title="Vincular produto/marca"
                           onClick={() => openItemSheet(item)}
                         >
-                          <Edit2 className="h-3.5 w-3.5" />
+                          {needsLink ? <Link2 className="h-3.5 w-3.5" /> : <Edit2 className="h-3.5 w-3.5" />}
                         </Button>
                       </td>
                     )}
                   </tr>
-                ))}
+                  )
+                })}
               </tbody>
             </table>
           </div>

@@ -200,7 +200,7 @@ export function NotasEntradaPage() {
     try {
       const { data } = await api.post<NfEntrada>('/nf-entrada', body)
       setCreateOpen(false)
-      navigate(`/notas-entrada/${data.id}`)
+      navigate(`/notas-entrada/${data.id}?from=manual`)
     } catch (e: unknown) {
       const msg = (e as { response?: { data?: { message?: string | string[] } } })?.response?.data
         ?.message
@@ -228,7 +228,7 @@ export function NotasEntradaPage() {
       const { data } = await api.post<NfEntrada>('/nf-entrada/from-xml', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       })
-      navigate(`/notas-entrada/${data.id}`)
+      navigate(`/notas-entrada/${data.id}?from=xml`)
     } catch (e: unknown) {
       const msg = (e as { response?: { data?: { message?: string | string[] } } })?.response?.data
         ?.message
