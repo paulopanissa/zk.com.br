@@ -22,6 +22,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import {
+  Sheet,
+  SheetBody,
+  SheetContent,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet'
 import { cn } from '@/lib/utils'
 import { api } from '@/lib/api'
 
@@ -805,18 +813,18 @@ export function FornecedorDetalhe() {
         </DialogContent>
       </Dialog>
 
-      {/* ── Contact modal ──────────────────────────────────────────────────── */}
-      <Dialog
+      {/* ── Contact sheet ──────────────────────────────────────────────────── */}
+      <Sheet
         open={contactModal !== null}
         onOpenChange={(open) => { if (!open) setContactModal(null) }}
       >
-        <DialogContent className="sm:max-w-sm" onInteractOutside={(e) => e.preventDefault()}>
-          <DialogHeader>
-            <DialogTitle>
+        <SheetContent>
+          <SheetHeader>
+            <SheetTitle>
               {contactModal?.mode === 'create' ? 'Novo contato' : 'Editar contato'}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 pt-2">
+            </SheetTitle>
+          </SheetHeader>
+          <SheetBody className="space-y-5">
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-foreground">Nome *</label>
               <Input
@@ -834,52 +842,50 @@ export function FornecedorDetalhe() {
                 placeholder="Ex: Representante Comercial"
               />
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-foreground">E-mail</label>
-                <Input
-                  type="email"
-                  value={contactForm.email}
-                  onChange={(e) => setContactForm((p) => ({ ...p, email: e.target.value }))}
-                  placeholder="email@empresa.com"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-foreground">Telefone</label>
-                <Input
-                  value={contactForm.phone}
-                  onChange={(e) => setContactForm((p) => ({ ...p, phone: e.target.value }))}
-                  placeholder="(11) 99999-0000"
-                />
-              </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-foreground">E-mail</label>
+              <Input
+                type="email"
+                value={contactForm.email}
+                onChange={(e) => setContactForm((p) => ({ ...p, email: e.target.value }))}
+                placeholder="email@empresa.com"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-foreground">Telefone</label>
+              <Input
+                value={contactForm.phone}
+                onChange={(e) => setContactForm((p) => ({ ...p, phone: e.target.value }))}
+                placeholder="(11) 99999-0000"
+              />
             </div>
             {contactError && (
               <p className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
                 {contactError}
               </p>
             )}
-            <div className="flex justify-end gap-3 pt-2">
-              <Button variant="outline" onClick={() => setContactModal(null)}>Cancelar</Button>
-              <Button onClick={handleSaveContact} disabled={contactSaving}>
-                {contactSaving ? 'Salvando…' : 'Salvar'}
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+          </SheetBody>
+          <SheetFooter>
+            <Button variant="outline" onClick={() => setContactModal(null)}>Cancelar</Button>
+            <Button onClick={handleSaveContact} disabled={contactSaving}>
+              {contactSaving ? 'Salvando…' : 'Salvar'}
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
 
-      {/* ── Address modal ──────────────────────────────────────────────────── */}
-      <Dialog
+      {/* ── Address sheet ──────────────────────────────────────────────────── */}
+      <Sheet
         open={addressModal !== null}
         onOpenChange={(open) => { if (!open) setAddressModal(null) }}
       >
-        <DialogContent className="sm:max-w-md" onInteractOutside={(e) => e.preventDefault()}>
-          <DialogHeader>
-            <DialogTitle>
+        <SheetContent>
+          <SheetHeader>
+            <SheetTitle>
               {addressModal?.mode === 'create' ? 'Novo endereço' : 'Editar endereço'}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 pt-2">
+            </SheetTitle>
+          </SheetHeader>
+          <SheetBody className="space-y-5">
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-foreground">Rótulo *</label>
               <Input
@@ -958,15 +964,15 @@ export function FornecedorDetalhe() {
                 {addressError}
               </p>
             )}
-            <div className="flex justify-end gap-3 pt-2">
-              <Button variant="outline" onClick={() => setAddressModal(null)}>Cancelar</Button>
-              <Button onClick={handleSaveAddress} disabled={addressSaving}>
-                {addressSaving ? 'Salvando…' : 'Salvar'}
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+          </SheetBody>
+          <SheetFooter>
+            <Button variant="outline" onClick={() => setAddressModal(null)}>Cancelar</Button>
+            <Button onClick={handleSaveAddress} disabled={addressSaving}>
+              {addressSaving ? 'Salvando…' : 'Salvar'}
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
     </div>
   )
 }
