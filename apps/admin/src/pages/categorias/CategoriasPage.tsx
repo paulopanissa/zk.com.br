@@ -3,11 +3,13 @@ import { ChevronRight, Edit2, Plus, Tag, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+  Sheet,
+  SheetBody,
+  SheetContent,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet'
 import {
   Select,
   SelectContent,
@@ -206,12 +208,12 @@ export function CategoriasPage() {
         </div>
       )}
 
-      <Dialog open={modal !== null} onOpenChange={(open) => { if (!open) setModal(null) }}>
-        <DialogContent className="sm:max-w-md" onInteractOutside={(e) => e.preventDefault()}>
-          <DialogHeader>
-            <DialogTitle>{modal?.mode === 'create' ? 'Nova categoria' : 'Editar categoria'}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 pt-2">
+      <Sheet open={modal !== null} onOpenChange={(open) => { if (!open) setModal(null) }}>
+        <SheetContent>
+          <SheetHeader>
+            <SheetTitle>{modal?.mode === 'create' ? 'Nova categoria' : 'Editar categoria'}</SheetTitle>
+          </SheetHeader>
+          <SheetBody className="space-y-5">
             <div className="space-y-1.5">
               <label htmlFor="cat-name" className="text-sm font-medium text-foreground">Nome *</label>
               <Input
@@ -264,16 +266,15 @@ export function CategoriasPage() {
             {formError && (
               <p className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">{formError}</p>
             )}
-
-            <div className="flex justify-end gap-3 pt-2">
-              <Button variant="outline" onClick={() => setModal(null)}>Cancelar</Button>
-              <Button onClick={handleSave} disabled={saving}>
-                {saving ? 'Salvando…' : 'Salvar'}
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+          </SheetBody>
+          <SheetFooter>
+            <Button variant="outline" onClick={() => setModal(null)}>Cancelar</Button>
+            <Button onClick={handleSave} disabled={saving}>
+              {saving ? 'Salvando…' : 'Salvar'}
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
     </div>
   )
 }
