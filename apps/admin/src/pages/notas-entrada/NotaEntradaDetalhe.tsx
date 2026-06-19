@@ -10,6 +10,7 @@ import {
   FileText,
   Layers,
   Link2,
+  PackagePlus,
   Paperclip,
   XCircle,
 } from 'lucide-react'
@@ -173,7 +174,14 @@ export function NotaEntradaDetalhe() {
   const [itemError, setItemError] = useState<string | null>(null)
   const [products, setProducts] = useState<ProductOption[]>([])
   const [productSearch, setProductSearch] = useState('')
+  const [noResultsFor, setNoResultsFor] = useState<string | null>(null)
   const [brands, setBrands] = useState<BrandOption[]>([])
+
+  // Quick-create product inline
+  interface QuickCreateForm { name: string; sku: string; barcode: string; unit: string }
+  const [quickCreate, setQuickCreate] = useState<QuickCreateForm | null>(null)
+  const [quickCreating, setQuickCreating] = useState(false)
+  const [quickCreateError, setQuickCreateError] = useState<string | null>(null)
 
   // Bulk brand sheet
   const [bulkBrandOpen, setBulkBrandOpen] = useState(false)
@@ -207,13 +215,20 @@ export function NotaEntradaDetalhe() {
 
   useEffect(() => {
     if (!itemSheet) return
+    const q = productSearch.trim()
     const timeout = setTimeout(() => {
       const params: Record<string, unknown> = { limit: 20 }
-      if (productSearch.trim()) params.search = productSearch.trim()
+      if (q) params.name = q
       api
         .get<{ data: ProductOption[] }>('/products', { params })
-        .then((r) => setProducts(r.data.data))
-        .catch(() => {/* non-critical */})
+        .then((r) => {
+          setProducts(r.data.data)
+          setNoResultsFor(r.data.data.length === 0 && q.length > 1 ? q : null)
+        })
+        .catch(() => {
+          setProducts([])
+          setNoResultsFor(null)
+        })
     }, 300)
     return () => clearTimeout(timeout)
   }, [productSearch, itemSheet])
@@ -295,9 +310,50 @@ export function NotaEntradaDetalhe() {
   function openItemSheet(item: NfEntradaItem) {
     setItemForm(buildItemLinkForm(item))
     setItemError(null)
-    setProductSearch(item.product?.name ?? '')
+    setProductSearch(item.product?.name ?? item.descricao)
+    setNoResultsFor(null)
+    setQuickCreate(null)
+    setQuickCreateError(null)
     loadBrands()
     setItemSheet({ item })
+  }
+
+  function openQuickCreate() {
+    if (!itemSheet) return
+    const item = itemSheet.item
+    setQuickCreate({
+      name: item.descricao,
+      sku: item.codigo_produto ?? '',
+      barcode: item.ean ?? '',
+      unit: item.unidade_medida ?? 'UN',
+    })
+    setQuickCreateError(null)
+    setProducts([])
+    setNoResultsFor(null)
+  }
+
+  async function handleQuickCreate() {
+    if (!quickCreate || !quickCreate.name.trim()) {
+      setQuickCreateError('Nome do produto é obrigatório.')
+      return
+    }
+    setQuickCreating(true)
+    setQuickCreateError(null)
+    try {
+      const body: Record<string, unknown> = { name: quickCreate.name.trim() }
+      if (quickCreate.sku.trim()) body.sku = quickCreate.sku.trim()
+      if (quickCreate.barcode.trim()) body.barcode = quickCreate.barcode.trim()
+      if (quickCreate.unit.trim()) body.unit = quickCreate.unit.trim()
+      const { data } = await api.post<ProductOption>('/products', body)
+      setItemForm((f) => ({ ...f, product_id: data.id }))
+      setProductSearch(data.name)
+      setQuickCreate(null)
+    } catch (e) {
+      const msg = extractApiError(e)
+      setQuickCreateError(msg || 'Erro ao criar produto. Tente novamente.')
+    } finally {
+      setQuickCreating(false)
+    }
   }
 
   async function handleSaveItemLink() {
@@ -738,7 +794,14 @@ export function NotaEntradaDetalhe() {
       </div>
 
       {/* ── Item link sheet ────────────────────────────────────────────────── */}
-      <Sheet open={itemSheet !== null} onOpenChange={(open) => { if (!open) setItemSheet(null) }}>
+      <Sheet open={itemSheet !== null} onOpenChange={(open) => {
+        if (!open) {
+          setItemSheet(null)
+          setQuickCreate(null)
+          setQuickCreateError(null)
+          setNoResultsFor(null)
+        }
+      }}>
         <SheetContent>
           <SheetHeader>
             <SheetTitle>Vincular item</SheetTitle>
@@ -756,15 +819,17 @@ export function NotaEntradaDetalhe() {
             {/* Product search */}
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-foreground">Produto</label>
-              <Input
-                value={productSearch}
-                onChange={(e) => {
-                  setProductSearch(e.target.value)
-                  if (!e.target.value) setItemForm((p) => ({ ...p, product_id: '' }))
-                }}
-                placeholder="Buscar produto…"
-              />
-              {products.length > 0 && (
+              {!quickCreate && (
+                <Input
+                  value={productSearch}
+                  onChange={(e) => {
+                    setProductSearch(e.target.value)
+                    if (!e.target.value) setItemForm((p) => ({ ...p, product_id: '' }))
+                  }}
+                  placeholder="Buscar produto…"
+                />
+              )}
+              {!quickCreate && products.length > 0 && !itemForm.product_id && (
                 <div className="rounded-md border border-border bg-card max-h-48 overflow-y-auto divide-y divide-border/50">
                   {products.map((p) => (
                     <button
@@ -774,6 +839,7 @@ export function NotaEntradaDetalhe() {
                         setItemForm((f) => ({ ...f, product_id: p.id }))
                         setProductSearch(p.name)
                         setProducts([])
+                        setNoResultsFor(null)
                       }}
                       className={cn(
                         'w-full text-left px-3 py-2 text-sm hover:bg-surface-alt transition-colors',
@@ -783,6 +849,125 @@ export function NotaEntradaDetalhe() {
                       {p.name}
                     </button>
                   ))}
+                </div>
+              )}
+
+              {/* No-results empty state */}
+              {!quickCreate && noResultsFor && noResultsFor === productSearch.trim() && !itemForm.product_id && (
+                <div className="rounded-lg border border-dashed border-border bg-card px-4 py-3.5 space-y-3 animate-in fade-in slide-in-from-top-1 duration-200">
+                  <div className="flex items-start gap-2.5">
+                    <PackagePlus className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+                    <p className="text-sm text-muted-foreground leading-snug">
+                      Nenhum produto encontrado para{' '}
+                      <span className="font-medium text-foreground">"{noResultsFor}"</span>
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={openQuickCreate}
+                    className="w-full rounded-md border border-brand-orange/40 bg-brand-orange/8 px-3 py-2 text-sm font-medium text-brand-orange hover:bg-brand-orange/15 transition-colors flex items-center justify-center gap-2"
+                  >
+                    <PackagePlus className="h-3.5 w-3.5" />
+                    Criar produto a partir deste item
+                  </button>
+                </div>
+              )}
+
+              {/* Quick-create inline form */}
+              {quickCreate && (
+                <div className="rounded-lg border border-brand-orange/30 bg-brand-orange/5 overflow-hidden animate-in slide-in-from-top-2 fade-in duration-200">
+                  <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-brand-orange/20">
+                    <div className="flex items-center gap-2">
+                      <PackagePlus className="h-3.5 w-3.5 text-brand-orange" />
+                      <span className="text-xs font-semibold text-brand-orange">Criar novo produto</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => { setQuickCreate(null); setQuickCreateError(null) }}
+                      className="text-muted-foreground hover:text-foreground transition-colors"
+                      aria-label="Cancelar"
+                    >
+                      <XCircle className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                  <div className="p-3.5 space-y-3">
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-foreground">Nome *</label>
+                      <Input
+                        value={quickCreate.name}
+                        onChange={(e) => setQuickCreate((q) => q ? { ...q, name: e.target.value } : q)}
+                        placeholder="Nome do produto"
+                        autoFocus
+                        className="text-sm"
+                      />
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="space-y-1">
+                        <label className="text-xs font-medium text-foreground">SKU</label>
+                        <Input
+                          value={quickCreate.sku}
+                          onChange={(e) => setQuickCreate((q) => q ? { ...q, sku: e.target.value } : q)}
+                          placeholder="Código"
+                          className="font-mono text-xs"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs font-medium text-foreground">EAN</label>
+                        <Input
+                          value={quickCreate.barcode}
+                          onChange={(e) => setQuickCreate((q) => q ? { ...q, barcode: e.target.value } : q)}
+                          placeholder="Barcode"
+                          className="font-mono text-xs"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs font-medium text-foreground">Unid.</label>
+                        <Input
+                          value={quickCreate.unit}
+                          onChange={(e) => setQuickCreate((q) => q ? { ...q, unit: e.target.value.toUpperCase() } : q)}
+                          placeholder="UN"
+                          maxLength={10}
+                          className="text-xs uppercase"
+                        />
+                      </div>
+                    </div>
+                    {itemSheet?.item.ncm && (
+                      <p className="text-xs text-muted-foreground">
+                        NCM <span className="font-mono">{itemSheet.item.ncm}</span> — configure dados fiscais no produto após criar
+                      </p>
+                    )}
+                    {quickCreateError && (
+                      <p className="text-xs text-destructive">{quickCreateError}</p>
+                    )}
+                    <Button
+                      size="sm"
+                      onClick={handleQuickCreate}
+                      disabled={quickCreating || !quickCreate.name.trim()}
+                      className="w-full bg-brand-orange text-white hover:bg-brand-orange/90"
+                    >
+                      {quickCreating ? 'Criando…' : 'Criar e vincular'}
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* Selected product chip */}
+              {itemForm.product_id && !quickCreate && (
+                <div className="flex items-center gap-2 rounded-md bg-brand-sage/10 border border-brand-sage/30 px-3 py-1.5 animate-in fade-in duration-150">
+                  <CheckCircle2 className="h-3.5 w-3.5 text-brand-sage shrink-0" />
+                  <span className="text-xs font-medium text-brand-brown flex-1 truncate">{productSearch}</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setItemForm((f) => ({ ...f, product_id: '' }))
+                      setProductSearch('')
+                      setNoResultsFor(null)
+                    }}
+                    className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                    aria-label="Remover produto"
+                  >
+                    <XCircle className="h-3.5 w-3.5" />
+                  </button>
                 </div>
               )}
             </div>
