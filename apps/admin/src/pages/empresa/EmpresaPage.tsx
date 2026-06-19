@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Building2, Edit2, MapPin, Phone, Mail, Globe } from 'lucide-react'
+import { Building2, Edit2, MapPin, Phone, Mail, Globe, Plus, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -17,25 +17,29 @@ import { UnidadesPage } from '@/pages/unidades/UnidadesPage'
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type RegimeTributario = 'SIMPLES' | 'LUCRO_PRESUMIDO' | 'LUCRO_REAL'
+type TipoEnderecoEmpresa = 'MATRIZ' | 'CORRESPONDENCIA' | 'COBRANCA'
+type TipoTelefoneEmpresa = 'COMERCIAL' | 'FINANCEIRO' | 'SUPORTE' | 'WHATSAPP' | 'OUTRO'
+type TipoEmailEmpresa = 'COMERCIAL' | 'FINANCEIRO' | 'SUPORTE' | 'NFE' | 'DPO' | 'OUTRO'
 type Aba = 'empresa' | 'unidades'
 
 interface CompanyEmail {
   id: string
   email: string
-  tipo: string
+  tipo: TipoEmailEmpresa
   principal: boolean
 }
 
 interface CompanyPhone {
   id: string
   numero: string
-  tipo: string
+  ddi: string | null
+  tipo: TipoTelefoneEmpresa
   principal: boolean
 }
 
 interface CompanyAddress {
   id: string
-  tipo: string
+  tipo: TipoEnderecoEmpresa
   logradouro: string
   numero: string
   complemento: string | null
@@ -63,17 +67,6 @@ interface CompanySettings {
   addresses: CompanyAddress[]
 }
 
-interface FormState {
-  razao_social: string
-  nome_fantasia: string
-  cnpj_cpf: string
-  regime_tributario: RegimeTributario
-  inscricao_estadual: string
-  inscricao_municipal: string
-  site_url: string
-  dpo_email: string
-}
-
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const REGIME_LABEL: Record<RegimeTributario, string> = {
@@ -82,23 +75,27 @@ const REGIME_LABEL: Record<RegimeTributario, string> = {
   LUCRO_REAL: 'Lucro Real',
 }
 
+const TIPO_TELEFONE_LABEL: Record<TipoTelefoneEmpresa, string> = {
+  COMERCIAL: 'Comercial',
+  FINANCEIRO: 'Financeiro',
+  SUPORTE: 'Suporte',
+  WHATSAPP: 'WhatsApp',
+  OUTRO: 'Outro',
+}
+
+const TIPO_EMAIL_LABEL: Record<TipoEmailEmpresa, string> = {
+  COMERCIAL: 'Comercial',
+  FINANCEIRO: 'Financeiro',
+  SUPORTE: 'Suporte',
+  NFE: 'NF-e',
+  DPO: 'DPO',
+  OUTRO: 'Outro',
+}
+
 const ABAS = [
   { key: 'empresa' as Aba, label: 'Dados da Empresa' },
   { key: 'unidades' as Aba, label: 'Unidades' },
 ]
-
-function buildForm(s?: CompanySettings): FormState {
-  return {
-    razao_social: s?.razao_social ?? '',
-    nome_fantasia: s?.nome_fantasia ?? '',
-    cnpj_cpf: s?.cnpj_cpf ?? '',
-    regime_tributario: s?.regime_tributario ?? 'SIMPLES',
-    inscricao_estadual: s?.inscricao_estadual ?? '',
-    inscricao_municipal: s?.inscricao_municipal ?? '',
-    site_url: s?.site_url ?? '',
-    dpo_email: s?.dpo_email ?? '',
-  }
-}
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
@@ -114,12 +111,12 @@ function Field({ label, value }: { label: string; value: string | null | undefin
 function SectionCard({
   title,
   icon: Icon,
-  onEdit,
+  action,
   children,
 }: {
   title: string
   icon: React.ElementType
-  onEdit?: () => void
+  action?: React.ReactNode
   children: React.ReactNode
 }) {
   return (
@@ -129,29 +126,75 @@ function SectionCard({
           <Icon className="h-4 w-4 text-primary" />
           <h2 className="font-display text-base font-bold text-foreground">{title}</h2>
         </div>
-        {onEdit && (
-          <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-muted-foreground hover:text-foreground" onClick={onEdit}>
-            <Edit2 className="h-3.5 w-3.5" />
-            Editar
-          </Button>
-        )}
+        {action}
       </div>
       <div className="p-5">{children}</div>
     </div>
   )
 }
 
-// ─── Main component ───────────────────────────────────────────────────────────
+// ─── EmpresaPage ──────────────────────────────────────────────────────────────
 
 export function EmpresaPage() {
   const [aba, setAba] = useState<Aba>('empresa')
   const [settings, setSettings] = useState<CompanySettings | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  // Sheet: Dados básicos
   const [editOpen, setEditOpen] = useState(false)
-  const [form, setForm] = useState<FormState>(buildForm())
-  const [saving, setSaving] = useState(false)
-  const [formError, setFormError] = useState<string | null>(null)
+  const [basicForm, setBasicForm] = useState({
+    razao_social: '',
+    nome_fantasia: '',
+    cnpj_cpf: '',
+    regime_tributario: 'SIMPLES' as RegimeTributario,
+    inscricao_estadual: '',
+    inscricao_municipal: '',
+    site_url: '',
+    dpo_email: '',
+  })
+  const [basicSaving, setBasicSaving] = useState(false)
+  const [basicError, setBasicError] = useState<string | null>(null)
+
+  // Sheet: Endereço
+  const [addrOpen, setAddrOpen] = useState(false)
+  const [addrTarget, setAddrTarget] = useState<CompanyAddress | null>(null)
+  const [addrForm, setAddrForm] = useState({
+    tipo: 'MATRIZ' as TipoEnderecoEmpresa,
+    logradouro: '',
+    numero: '',
+    complemento: '',
+    bairro: '',
+    municipio: '',
+    uf: '',
+    cep: '',
+    principal: true,
+  })
+  const [addrSaving, setAddrSaving] = useState(false)
+  const [addrError, setAddrError] = useState<string | null>(null)
+
+  // Sheet: Telefone
+  const [phoneOpen, setPhoneOpen] = useState(false)
+  const [phoneTarget, setPhoneTarget] = useState<CompanyPhone | null>(null)
+  const [phoneForm, setPhoneForm] = useState({
+    tipo: 'COMERCIAL' as TipoTelefoneEmpresa,
+    ddi: '+55',
+    numero: '',
+    principal: true,
+  })
+  const [phoneSaving, setPhoneSaving] = useState(false)
+  const [phoneError, setPhoneError] = useState<string | null>(null)
+
+  // Sheet: Emails
+  const [emailOpen, setEmailOpen] = useState(false)
+  const [emailTarget, setEmailTarget] = useState<CompanyEmail | null>(null)
+  const [emailForm, setEmailForm] = useState({
+    tipo: 'COMERCIAL' as TipoEmailEmpresa,
+    email: '',
+    principal: false,
+  })
+  const [emailSaving, setEmailSaving] = useState(false)
+  const [emailError, setEmailError] = useState<string | null>(null)
 
   const load = useCallback(() => {
     setLoading(true)
@@ -167,63 +210,232 @@ export function EmpresaPage() {
     load()
   }, [load])
 
-  function openEdit() {
-    setForm(buildForm(settings ?? undefined))
-    setFormError(null)
+  // ── Handlers: Dados básicos ──────────────────────────────────────────────
+
+  function openBasicEdit() {
+    const s = settings
+    setBasicForm({
+      razao_social: s?.razao_social ?? '',
+      nome_fantasia: s?.nome_fantasia ?? '',
+      cnpj_cpf: s?.cnpj_cpf ?? '',
+      regime_tributario: s?.regime_tributario ?? 'SIMPLES',
+      inscricao_estadual: s?.inscricao_estadual ?? '',
+      inscricao_municipal: s?.inscricao_municipal ?? '',
+      site_url: s?.site_url ?? '',
+      dpo_email: s?.dpo_email ?? '',
+    })
+    setBasicError(null)
     setEditOpen(true)
   }
 
-  function patch(updates: Partial<FormState>) {
-    setForm((f) => ({ ...f, ...updates }))
-  }
-
-  async function handleSave() {
-    if (!form.razao_social.trim()) {
-      setFormError('Razão social é obrigatória.')
+  async function saveBasic() {
+    if (!basicForm.razao_social.trim()) {
+      setBasicError('Razão social é obrigatória.')
       return
     }
-    const cnpjDigits = form.cnpj_cpf.replace(/\D/g, '')
+    const cnpjDigits = basicForm.cnpj_cpf.replace(/\D/g, '')
     if (!cnpjDigits || (cnpjDigits.length !== 11 && cnpjDigits.length !== 14)) {
-      setFormError('CNPJ/CPF inválido. Informe 14 dígitos (CNPJ) ou 11 dígitos (CPF).')
+      setBasicError('CNPJ/CPF inválido. Informe 14 dígitos (CNPJ) ou 11 dígitos (CPF).')
       return
     }
-
-    setSaving(true)
-    setFormError(null)
+    setBasicSaving(true)
+    setBasicError(null)
     try {
       await api.put('/company-settings', {
-        razao_social: form.razao_social.trim(),
-        nome_fantasia: form.nome_fantasia.trim() || undefined,
+        razao_social: basicForm.razao_social.trim(),
+        nome_fantasia: basicForm.nome_fantasia.trim() || undefined,
         cnpj_cpf: cnpjDigits,
-        regime_tributario: form.regime_tributario,
-        inscricao_estadual: form.inscricao_estadual.trim() || undefined,
-        inscricao_municipal: form.inscricao_municipal.trim() || undefined,
-        site_url: form.site_url.trim() || undefined,
-        dpo_email: form.dpo_email.trim() || undefined,
+        regime_tributario: basicForm.regime_tributario,
+        inscricao_estadual: basicForm.inscricao_estadual.trim() || undefined,
+        inscricao_municipal: basicForm.inscricao_municipal.trim() || undefined,
+        site_url: basicForm.site_url.trim() || undefined,
+        dpo_email: basicForm.dpo_email.trim() || undefined,
       })
       setEditOpen(false)
       load()
     } catch (e: unknown) {
       const msg = (e as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message
       const text = Array.isArray(msg) ? msg[0] : msg
-      setFormError(typeof text === 'string' ? text : 'Erro ao salvar. Tente novamente.')
+      setBasicError(typeof text === 'string' ? text : 'Erro ao salvar.')
     } finally {
-      setSaving(false)
+      setBasicSaving(false)
     }
   }
 
+  // ── Handlers: Endereço ───────────────────────────────────────────────────
+
+  function openAddrEdit(addr?: CompanyAddress) {
+    setAddrTarget(addr ?? null)
+    setAddrForm({
+      tipo: addr?.tipo ?? 'MATRIZ',
+      logradouro: addr?.logradouro ?? '',
+      numero: addr?.numero ?? '',
+      complemento: addr?.complemento ?? '',
+      bairro: addr?.bairro ?? '',
+      municipio: addr?.municipio ?? '',
+      uf: addr?.uf ?? '',
+      cep: addr?.cep ?? '',
+      principal: addr?.principal ?? true,
+    })
+    setAddrError(null)
+    setAddrOpen(true)
+  }
+
+  async function saveAddr() {
+    const cepDigits = addrForm.cep.replace(/\D/g, '')
+    if (!addrForm.logradouro.trim()) { setAddrError('Logradouro é obrigatório.'); return }
+    if (!addrForm.numero.trim()) { setAddrError('Número é obrigatório.'); return }
+    if (!addrForm.bairro.trim()) { setAddrError('Bairro é obrigatório.'); return }
+    if (!addrForm.municipio.trim()) { setAddrError('Município é obrigatório.'); return }
+    if (!addrForm.uf.trim() || addrForm.uf.trim().length !== 2) { setAddrError('UF deve ter 2 letras.'); return }
+    if (cepDigits.length !== 8) { setAddrError('CEP deve ter 8 dígitos.'); return }
+
+    setAddrSaving(true)
+    setAddrError(null)
+    try {
+      const body = {
+        tipo: addrForm.tipo,
+        logradouro: addrForm.logradouro.trim(),
+        numero: addrForm.numero.trim(),
+        complemento: addrForm.complemento.trim() || undefined,
+        bairro: addrForm.bairro.trim(),
+        municipio: addrForm.municipio.trim(),
+        uf: addrForm.uf.trim().toUpperCase(),
+        cep: cepDigits,
+        principal: addrForm.principal,
+      }
+      if (addrTarget) {
+        await api.put(`/company-settings/addresses/${addrTarget.id}`, body)
+      } else {
+        await api.post('/company-settings/addresses', body)
+      }
+      setAddrOpen(false)
+      load()
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message
+      const text = Array.isArray(msg) ? msg[0] : msg
+      setAddrError(typeof text === 'string' ? text : 'Erro ao salvar.')
+    } finally {
+      setAddrSaving(false)
+    }
+  }
+
+  // ── Handlers: Telefone ───────────────────────────────────────────────────
+
+  function openPhoneEdit(phone?: CompanyPhone) {
+    setPhoneTarget(phone ?? null)
+    setPhoneForm({
+      tipo: phone?.tipo ?? 'COMERCIAL',
+      ddi: phone?.ddi ?? '+55',
+      numero: phone?.numero ?? '',
+      principal: phone?.principal ?? true,
+    })
+    setPhoneError(null)
+    setPhoneOpen(true)
+  }
+
+  async function savePhone() {
+    const digits = phoneForm.numero.replace(/\D/g, '')
+    if (!digits) { setPhoneError('Número é obrigatório.'); return }
+
+    setPhoneSaving(true)
+    setPhoneError(null)
+    try {
+      const body = {
+        tipo: phoneForm.tipo,
+        ddi: phoneForm.ddi.trim() || undefined,
+        numero: digits,
+        principal: phoneForm.principal,
+      }
+      if (phoneTarget) {
+        await api.put(`/company-settings/phones/${phoneTarget.id}`, body)
+      } else {
+        await api.post('/company-settings/phones', body)
+      }
+      setPhoneOpen(false)
+      load()
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message
+      const text = Array.isArray(msg) ? msg[0] : msg
+      setPhoneError(typeof text === 'string' ? text : 'Erro ao salvar.')
+    } finally {
+      setPhoneSaving(false)
+    }
+  }
+
+  async function deletePhone(phone: CompanyPhone) {
+    if (!confirm(`Remover telefone ${phone.numero}?`)) return
+    try {
+      await api.delete(`/company-settings/phones/${phone.id}`)
+      load()
+    } catch {
+      alert('Erro ao remover telefone.')
+    }
+  }
+
+  // ── Handlers: Email ──────────────────────────────────────────────────────
+
+  function openEmailEdit(email?: CompanyEmail) {
+    setEmailTarget(email ?? null)
+    setEmailForm({
+      tipo: email?.tipo ?? 'COMERCIAL',
+      email: email?.email ?? '',
+      principal: email?.principal ?? false,
+    })
+    setEmailError(null)
+    setEmailOpen(true)
+  }
+
+  async function saveEmail() {
+    if (!emailForm.email.trim()) { setEmailError('E-mail é obrigatório.'); return }
+
+    setEmailSaving(true)
+    setEmailError(null)
+    try {
+      const body = {
+        tipo: emailForm.tipo,
+        email: emailForm.email.trim(),
+        principal: emailForm.principal,
+      }
+      if (emailTarget) {
+        await api.put(`/company-settings/emails/${emailTarget.id}`, body)
+      } else {
+        await api.post('/company-settings/emails', body)
+      }
+      setEmailOpen(false)
+      load()
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message
+      const text = Array.isArray(msg) ? msg[0] : msg
+      setEmailError(typeof text === 'string' ? text : 'Erro ao salvar.')
+    } finally {
+      setEmailSaving(false)
+    }
+  }
+
+  async function deleteEmail(email: CompanyEmail) {
+    if (!confirm(`Remover e-mail ${email.email}?`)) return
+    try {
+      await api.delete(`/company-settings/emails/${email.id}`)
+      load()
+    } catch {
+      alert('Erro ao remover e-mail.')
+    }
+  }
+
+  // ── Derived ──────────────────────────────────────────────────────────────
+
   const principalAddress = settings?.addresses?.find((a) => a.principal) ?? settings?.addresses?.[0]
-  const principalEmail = settings?.emails?.find((e) => e.principal) ?? settings?.emails?.[0]
-  const principalPhone = settings?.phones?.find((p) => p.principal) ?? settings?.phones?.[0]
+
+  // ── Render ───────────────────────────────────────────────────────────────
 
   return (
     <div className="flex flex-col h-full">
-      {/* Page header */}
+      {/* Header */}
       <div className="px-6 pt-6 pb-0">
         <h1 className="font-display text-3xl font-bold text-foreground">Empresa</h1>
         <p className="text-sm text-muted-foreground mt-1">Dados cadastrais e unidades do negócio</p>
 
-        {/* Tabs */}
         <div className="mt-5 flex gap-1 border-b border-border">
           {ABAS.map((a) => (
             <button
@@ -258,11 +470,20 @@ export function EmpresaPage() {
                 Carregando…
               </div>
             ) : !settings ? (
-              <EmptyCompany onSetup={openEdit} />
+              <EmptyCompany onSetup={openBasicEdit} />
             ) : (
               <>
                 {/* Dados principais */}
-                <SectionCard title="Dados da Empresa" icon={Building2} onEdit={openEdit}>
+                <SectionCard
+                  title="Dados da Empresa"
+                  icon={Building2}
+                  action={
+                    <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-muted-foreground hover:text-foreground" onClick={openBasicEdit}>
+                      <Edit2 className="h-3.5 w-3.5" />
+                      Editar
+                    </Button>
+                  }
+                >
                   <div className="grid grid-cols-2 gap-x-8 gap-y-4 sm:grid-cols-3">
                     <Field label="Razão Social" value={settings.razao_social} />
                     <Field label="Nome Fantasia" value={settings.nome_fantasia} />
@@ -270,12 +491,42 @@ export function EmpresaPage() {
                     <Field label="Inscrição Estadual" value={settings.inscricao_estadual} />
                     <Field label="Inscrição Municipal" value={settings.inscricao_municipal} />
                     <Field label="Regime Tributário" value={REGIME_LABEL[settings.regime_tributario]} />
+                    {settings.site_url && (
+                      <div>
+                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Site</p>
+                        <a href={settings.site_url} target="_blank" rel="noopener noreferrer"
+                          className="mt-0.5 text-sm text-primary hover:underline flex items-center gap-1">
+                          <Globe className="h-3.5 w-3.5 shrink-0" />
+                          {settings.site_url}
+                        </a>
+                      </div>
+                    )}
+                    {settings.dpo_email && (
+                      <div>
+                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">E-mail DPO</p>
+                        <a href={`mailto:${settings.dpo_email}`}
+                          className="mt-0.5 text-sm text-primary hover:underline flex items-center gap-1">
+                          <Mail className="h-3.5 w-3.5 shrink-0" />
+                          {settings.dpo_email}
+                        </a>
+                      </div>
+                    )}
                   </div>
                 </SectionCard>
 
                 {/* Endereço */}
-                {principalAddress ? (
-                  <SectionCard title="Endereço" icon={MapPin}>
+                <SectionCard
+                  title="Endereço"
+                  icon={MapPin}
+                  action={
+                    <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-muted-foreground hover:text-foreground"
+                      onClick={() => openAddrEdit(principalAddress)}>
+                      {principalAddress ? <Edit2 className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
+                      {principalAddress ? 'Editar' : 'Adicionar'}
+                    </Button>
+                  }
+                >
+                  {principalAddress ? (
                     <div className="grid grid-cols-2 gap-x-8 gap-y-4 sm:grid-cols-3">
                       <Field
                         label="Logradouro"
@@ -285,60 +536,98 @@ export function EmpresaPage() {
                       <Field label="Cidade / UF" value={`${principalAddress.municipio}, ${principalAddress.uf}`} />
                       <Field label="CEP" value={principalAddress.cep} />
                     </div>
-                  </SectionCard>
-                ) : null}
+                  ) : (
+                    <p className="text-sm text-muted-foreground">Nenhum endereço cadastrado.</p>
+                  )}
+                </SectionCard>
 
-                {/* Contato */}
-                {(principalEmail || principalPhone || settings.site_url || settings.dpo_email) ? (
-                  <SectionCard title="Contato" icon={Phone}>
-                    <div className="grid grid-cols-2 gap-x-8 gap-y-4 sm:grid-cols-3">
-                      {principalPhone && <Field label="Telefone" value={principalPhone.numero} />}
-                      {principalEmail && <Field label="E-mail" value={principalEmail.email} />}
-                      {settings.site_url && (
-                        <div>
-                          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Site</p>
-                          <a
-                            href={settings.site_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="mt-0.5 text-sm text-primary hover:underline flex items-center gap-1"
-                          >
-                            <Globe className="h-3.5 w-3.5" />
-                            {settings.site_url}
-                          </a>
-                        </div>
-                      )}
-                      {settings.dpo_email && (
-                        <div>
-                          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                            E-mail DPO (LGPD)
-                          </p>
-                          <a
-                            href={`mailto:${settings.dpo_email}`}
-                            className="mt-0.5 text-sm text-primary hover:underline flex items-center gap-1"
-                          >
-                            <Mail className="h-3.5 w-3.5" />
-                            {settings.dpo_email}
-                          </a>
-                        </div>
-                      )}
-                    </div>
-                  </SectionCard>
-                ) : null}
-
-                {/* All emails list */}
-                {settings.emails.length > 1 && (
-                  <SectionCard title="E-mails" icon={Mail}>
+                {/* Telefones */}
+                <SectionCard
+                  title="Telefones"
+                  icon={Phone}
+                  action={
+                    <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-muted-foreground hover:text-foreground"
+                      onClick={() => openPhoneEdit()}>
+                      <Plus className="h-3.5 w-3.5" />
+                      Adicionar
+                    </Button>
+                  }
+                >
+                  {settings.phones.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">Nenhum telefone cadastrado.</p>
+                  ) : (
                     <div className="space-y-2">
-                      {settings.emails.map((e) => (
-                        <div key={e.id} className="flex items-center justify-between text-sm">
-                          <span className="text-foreground">{e.email}</span>
-                          <span className="text-xs text-muted-foreground capitalize">{e.tipo.toLowerCase()}</span>
+                      {settings.phones.map((p) => (
+                        <div key={p.id} className="flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-2 text-sm">
+                            <span className="text-foreground font-medium">
+                              {p.ddi ? `${p.ddi} ` : ''}{p.numero}
+                            </span>
+                            <span className="text-xs text-muted-foreground px-1.5 py-0.5 rounded bg-muted">
+                              {TIPO_TELEFONE_LABEL[p.tipo]}
+                            </span>
+                            {p.principal && (
+                              <span className="text-xs text-primary">principal</span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                              onClick={() => openPhoneEdit(p)}>
+                              <Edit2 className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                              onClick={() => deletePhone(p)}>
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
                         </div>
                       ))}
                     </div>
-                  </SectionCard>
-                )}
+                  )}
+                </SectionCard>
+
+                {/* E-mails */}
+                <SectionCard
+                  title="E-mails"
+                  icon={Mail}
+                  action={
+                    <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-muted-foreground hover:text-foreground"
+                      onClick={() => openEmailEdit()}>
+                      <Plus className="h-3.5 w-3.5" />
+                      Adicionar
+                    </Button>
+                  }
+                >
+                  {settings.emails.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">Nenhum e-mail cadastrado.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {settings.emails.map((e) => (
+                        <div key={e.id} className="flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-2 text-sm">
+                            <span className="text-foreground font-medium">{e.email}</span>
+                            <span className="text-xs text-muted-foreground px-1.5 py-0.5 rounded bg-muted">
+                              {TIPO_EMAIL_LABEL[e.tipo]}
+                            </span>
+                            {e.principal && (
+                              <span className="text-xs text-primary">principal</span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                              onClick={() => openEmailEdit(e)}>
+                              <Edit2 className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                              onClick={() => deleteEmail(e)}>
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </SectionCard>
               </>
             )}
           </div>
@@ -347,134 +636,227 @@ export function EmpresaPage() {
         {aba === 'unidades' && <UnidadesPage />}
       </div>
 
-      {/* Edit sheet */}
+      {/* ── Sheet: Dados básicos ─────────────────────────────────────────── */}
       <Sheet open={editOpen} onOpenChange={(open) => { if (!open) setEditOpen(false) }}>
         <SheetContent>
           <SheetHeader>
-            <SheetTitle>
-              {settings ? 'Editar dados da empresa' : 'Cadastrar empresa'}
-            </SheetTitle>
+            <SheetTitle>{settings ? 'Editar dados da empresa' : 'Cadastrar empresa'}</SheetTitle>
           </SheetHeader>
-
           <SheetBody className="space-y-4">
             <div className="space-y-1.5">
-              <label htmlFor="emp-razao" className="text-sm font-medium text-foreground">
-                Razão Social *
-              </label>
-              <Input
-                id="emp-razao"
-                value={form.razao_social}
-                onChange={(e) => patch({ razao_social: e.target.value })}
-                placeholder="Pet Shop Exemplo Ltda"
-                autoFocus
-              />
+              <label htmlFor="emp-razao" className="text-sm font-medium text-foreground">Razão Social *</label>
+              <Input id="emp-razao" value={basicForm.razao_social} autoFocus
+                onChange={(e) => setBasicForm((f) => ({ ...f, razao_social: e.target.value }))}
+                placeholder="Pet Shop Exemplo Ltda" />
             </div>
-
             <div className="space-y-1.5">
-              <label htmlFor="emp-fantasia" className="text-sm font-medium text-foreground">
-                Nome Fantasia
-              </label>
-              <Input
-                id="emp-fantasia"
-                value={form.nome_fantasia}
-                onChange={(e) => patch({ nome_fantasia: e.target.value })}
-                placeholder="Pet Shop Exemplo"
-              />
+              <label htmlFor="emp-fantasia" className="text-sm font-medium text-foreground">Nome Fantasia</label>
+              <Input id="emp-fantasia" value={basicForm.nome_fantasia}
+                onChange={(e) => setBasicForm((f) => ({ ...f, nome_fantasia: e.target.value }))}
+                placeholder="Pet Shop Exemplo" />
             </div>
-
             <div className="space-y-1.5">
-              <label htmlFor="emp-cnpj" className="text-sm font-medium text-foreground">
-                CNPJ / CPF *
-              </label>
-              <Input
-                id="emp-cnpj"
-                value={form.cnpj_cpf}
-                onChange={(e) => patch({ cnpj_cpf: e.target.value })}
-                placeholder="00.000.000/0000-00"
-                maxLength={18}
-              />
+              <label htmlFor="emp-cnpj" className="text-sm font-medium text-foreground">CNPJ / CPF *</label>
+              <Input id="emp-cnpj" value={basicForm.cnpj_cpf} maxLength={18}
+                onChange={(e) => setBasicForm((f) => ({ ...f, cnpj_cpf: e.target.value }))}
+                placeholder="00.000.000/0000-00" />
             </div>
-
             <div className="space-y-1.5">
-              <label htmlFor="emp-regime" className="text-sm font-medium text-foreground">
-                Regime Tributário *
-              </label>
-              <select
-                id="emp-regime"
-                value={form.regime_tributario}
-                onChange={(e) => patch({ regime_tributario: e.target.value as RegimeTributario })}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-              >
+              <label htmlFor="emp-regime" className="text-sm font-medium text-foreground">Regime Tributário *</label>
+              <select id="emp-regime" value={basicForm.regime_tributario}
+                onChange={(e) => setBasicForm((f) => ({ ...f, regime_tributario: e.target.value as RegimeTributario }))}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                 <option value="SIMPLES">Simples Nacional</option>
                 <option value="LUCRO_PRESUMIDO">Lucro Presumido</option>
                 <option value="LUCRO_REAL">Lucro Real</option>
               </select>
             </div>
-
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <label htmlFor="emp-ie" className="text-sm font-medium text-foreground">
-                  Inscrição Estadual
-                </label>
-                <Input
-                  id="emp-ie"
-                  value={form.inscricao_estadual}
-                  onChange={(e) => patch({ inscricao_estadual: e.target.value })}
-                  placeholder="123456789"
-                />
+                <label htmlFor="emp-ie" className="text-sm font-medium text-foreground">Inscrição Estadual</label>
+                <Input id="emp-ie" value={basicForm.inscricao_estadual}
+                  onChange={(e) => setBasicForm((f) => ({ ...f, inscricao_estadual: e.target.value }))}
+                  placeholder="123456789" />
               </div>
               <div className="space-y-1.5">
-                <label htmlFor="emp-im" className="text-sm font-medium text-foreground">
-                  Inscrição Municipal
-                </label>
-                <Input
-                  id="emp-im"
-                  value={form.inscricao_municipal}
-                  onChange={(e) => patch({ inscricao_municipal: e.target.value })}
-                  placeholder="987654321"
-                />
+                <label htmlFor="emp-im" className="text-sm font-medium text-foreground">Inscrição Municipal</label>
+                <Input id="emp-im" value={basicForm.inscricao_municipal}
+                  onChange={(e) => setBasicForm((f) => ({ ...f, inscricao_municipal: e.target.value }))}
+                  placeholder="987654321" />
               </div>
             </div>
-
             <div className="space-y-1.5">
-              <label htmlFor="emp-site" className="text-sm font-medium text-foreground">
-                Site
-              </label>
-              <Input
-                id="emp-site"
-                value={form.site_url}
-                onChange={(e) => patch({ site_url: e.target.value })}
-                placeholder="https://www.meusite.com.br"
-              />
+              <label htmlFor="emp-site" className="text-sm font-medium text-foreground">Site</label>
+              <Input id="emp-site" value={basicForm.site_url}
+                onChange={(e) => setBasicForm((f) => ({ ...f, site_url: e.target.value }))}
+                placeholder="https://www.meusite.com.br" />
             </div>
-
             <div className="space-y-1.5">
-              <label htmlFor="emp-dpo" className="text-sm font-medium text-foreground">
-                E-mail DPO (LGPD)
-              </label>
-              <Input
-                id="emp-dpo"
-                type="email"
-                value={form.dpo_email}
-                onChange={(e) => patch({ dpo_email: e.target.value })}
-                placeholder="dpo@empresa.com.br"
-              />
+              <label htmlFor="emp-dpo" className="text-sm font-medium text-foreground">E-mail DPO (LGPD)</label>
+              <Input id="emp-dpo" type="email" value={basicForm.dpo_email}
+                onChange={(e) => setBasicForm((f) => ({ ...f, dpo_email: e.target.value }))}
+                placeholder="dpo@empresa.com.br" />
             </div>
-
-            {formError && (
-              <p className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                {formError}
-              </p>
-            )}
+            {basicError && <p className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">{basicError}</p>}
           </SheetBody>
-
           <SheetFooter>
-            <Button variant="outline" onClick={() => setEditOpen(false)}>
-              Cancelar
-            </Button>
-            <Button onClick={handleSave} disabled={saving}>
-              {saving ? 'Salvando…' : 'Salvar'}
-            </Button>
+            <Button variant="outline" onClick={() => setEditOpen(false)}>Cancelar</Button>
+            <Button onClick={saveBasic} disabled={basicSaving}>{basicSaving ? 'Salvando…' : 'Salvar'}</Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
+
+      {/* ── Sheet: Endereço ──────────────────────────────────────────────── */}
+      <Sheet open={addrOpen} onOpenChange={(open) => { if (!open) setAddrOpen(false) }}>
+        <SheetContent>
+          <SheetHeader>
+            <SheetTitle>{addrTarget ? 'Editar endereço' : 'Adicionar endereço'}</SheetTitle>
+          </SheetHeader>
+          <SheetBody className="space-y-4">
+            <div className="space-y-1.5">
+              <label htmlFor="addr-tipo" className="text-sm font-medium text-foreground">Tipo</label>
+              <select id="addr-tipo" value={addrForm.tipo}
+                onChange={(e) => setAddrForm((f) => ({ ...f, tipo: e.target.value as TipoEnderecoEmpresa }))}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                <option value="MATRIZ">Matriz</option>
+                <option value="CORRESPONDENCIA">Correspondência</option>
+                <option value="COBRANCA">Cobrança</option>
+              </select>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="col-span-2 space-y-1.5">
+                <label htmlFor="addr-cep" className="text-sm font-medium text-foreground">CEP *</label>
+                <Input id="addr-cep" value={addrForm.cep} maxLength={8} placeholder="00000000"
+                  onChange={(e) => setAddrForm((f) => ({ ...f, cep: e.target.value.replace(/\D/g, '').slice(0, 8) }))} />
+              </div>
+              <div className="space-y-1.5">
+                <label htmlFor="addr-uf" className="text-sm font-medium text-foreground">UF *</label>
+                <Input id="addr-uf" value={addrForm.uf} maxLength={2} placeholder="SP"
+                  onChange={(e) => setAddrForm((f) => ({ ...f, uf: e.target.value.toUpperCase().slice(0, 2) }))} />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <label htmlFor="addr-logradouro" className="text-sm font-medium text-foreground">Logradouro *</label>
+              <Input id="addr-logradouro" value={addrForm.logradouro} placeholder="Rua, Av., Alameda…"
+                onChange={(e) => setAddrForm((f) => ({ ...f, logradouro: e.target.value }))} />
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-1.5">
+                <label htmlFor="addr-numero" className="text-sm font-medium text-foreground">Número *</label>
+                <Input id="addr-numero" value={addrForm.numero} placeholder="123"
+                  onChange={(e) => setAddrForm((f) => ({ ...f, numero: e.target.value }))} />
+              </div>
+              <div className="col-span-2 space-y-1.5">
+                <label htmlFor="addr-compl" className="text-sm font-medium text-foreground">Complemento</label>
+                <Input id="addr-compl" value={addrForm.complemento} placeholder="Sala, Andar…"
+                  onChange={(e) => setAddrForm((f) => ({ ...f, complemento: e.target.value }))} />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label htmlFor="addr-bairro" className="text-sm font-medium text-foreground">Bairro *</label>
+                <Input id="addr-bairro" value={addrForm.bairro} placeholder="Centro"
+                  onChange={(e) => setAddrForm((f) => ({ ...f, bairro: e.target.value }))} />
+              </div>
+              <div className="space-y-1.5">
+                <label htmlFor="addr-municipio" className="text-sm font-medium text-foreground">Município *</label>
+                <Input id="addr-municipio" value={addrForm.municipio} placeholder="São Paulo"
+                  onChange={(e) => setAddrForm((f) => ({ ...f, municipio: e.target.value }))} />
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <input id="addr-principal" type="checkbox" checked={addrForm.principal}
+                onChange={(e) => setAddrForm((f) => ({ ...f, principal: e.target.checked }))}
+                className="h-4 w-4 rounded" />
+              <label htmlFor="addr-principal" className="text-sm font-medium text-foreground">Endereço principal</label>
+            </div>
+            {addrError && <p className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">{addrError}</p>}
+          </SheetBody>
+          <SheetFooter>
+            <Button variant="outline" onClick={() => setAddrOpen(false)}>Cancelar</Button>
+            <Button onClick={saveAddr} disabled={addrSaving}>{addrSaving ? 'Salvando…' : 'Salvar'}</Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
+
+      {/* ── Sheet: Telefone ──────────────────────────────────────────────── */}
+      <Sheet open={phoneOpen} onOpenChange={(open) => { if (!open) setPhoneOpen(false) }}>
+        <SheetContent>
+          <SheetHeader>
+            <SheetTitle>{phoneTarget ? 'Editar telefone' : 'Adicionar telefone'}</SheetTitle>
+          </SheetHeader>
+          <SheetBody className="space-y-4">
+            <div className="space-y-1.5">
+              <label htmlFor="phone-tipo" className="text-sm font-medium text-foreground">Tipo</label>
+              <select id="phone-tipo" value={phoneForm.tipo}
+                onChange={(e) => setPhoneForm((f) => ({ ...f, tipo: e.target.value as TipoTelefoneEmpresa }))}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                {Object.entries(TIPO_TELEFONE_LABEL).map(([k, v]) => (
+                  <option key={k} value={k}>{v}</option>
+                ))}
+              </select>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-1.5">
+                <label htmlFor="phone-ddi" className="text-sm font-medium text-foreground">DDI</label>
+                <Input id="phone-ddi" value={phoneForm.ddi} placeholder="+55" maxLength={5}
+                  onChange={(e) => setPhoneForm((f) => ({ ...f, ddi: e.target.value }))} />
+              </div>
+              <div className="col-span-2 space-y-1.5">
+                <label htmlFor="phone-numero" className="text-sm font-medium text-foreground">Número *</label>
+                <Input id="phone-numero" value={phoneForm.numero} placeholder="11987654321"
+                  onChange={(e) => setPhoneForm((f) => ({ ...f, numero: e.target.value }))} />
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <input id="phone-principal" type="checkbox" checked={phoneForm.principal}
+                onChange={(e) => setPhoneForm((f) => ({ ...f, principal: e.target.checked }))}
+                className="h-4 w-4 rounded" />
+              <label htmlFor="phone-principal" className="text-sm font-medium text-foreground">Telefone principal</label>
+            </div>
+            {phoneError && <p className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">{phoneError}</p>}
+          </SheetBody>
+          <SheetFooter>
+            <Button variant="outline" onClick={() => setPhoneOpen(false)}>Cancelar</Button>
+            <Button onClick={savePhone} disabled={phoneSaving}>{phoneSaving ? 'Salvando…' : 'Salvar'}</Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
+
+      {/* ── Sheet: E-mail ────────────────────────────────────────────────── */}
+      <Sheet open={emailOpen} onOpenChange={(open) => { if (!open) setEmailOpen(false) }}>
+        <SheetContent>
+          <SheetHeader>
+            <SheetTitle>{emailTarget ? 'Editar e-mail' : 'Adicionar e-mail'}</SheetTitle>
+          </SheetHeader>
+          <SheetBody className="space-y-4">
+            <div className="space-y-1.5">
+              <label htmlFor="email-tipo" className="text-sm font-medium text-foreground">Tipo</label>
+              <select id="email-tipo" value={emailForm.tipo}
+                onChange={(e) => setEmailForm((f) => ({ ...f, tipo: e.target.value as TipoEmailEmpresa }))}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                {Object.entries(TIPO_EMAIL_LABEL).map(([k, v]) => (
+                  <option key={k} value={k}>{v}</option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <label htmlFor="email-addr" className="text-sm font-medium text-foreground">E-mail *</label>
+              <Input id="email-addr" type="email" value={emailForm.email} autoFocus
+                onChange={(e) => setEmailForm((f) => ({ ...f, email: e.target.value }))}
+                placeholder="contato@empresa.com.br" />
+            </div>
+            <div className="flex items-center gap-3">
+              <input id="email-principal" type="checkbox" checked={emailForm.principal}
+                onChange={(e) => setEmailForm((f) => ({ ...f, principal: e.target.checked }))}
+                className="h-4 w-4 rounded" />
+              <label htmlFor="email-principal" className="text-sm font-medium text-foreground">E-mail principal</label>
+            </div>
+            {emailError && <p className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">{emailError}</p>}
+          </SheetBody>
+          <SheetFooter>
+            <Button variant="outline" onClick={() => setEmailOpen(false)}>Cancelar</Button>
+            <Button onClick={saveEmail} disabled={emailSaving}>{emailSaving ? 'Salvando…' : 'Salvar'}</Button>
           </SheetFooter>
         </SheetContent>
       </Sheet>
@@ -493,9 +875,7 @@ function EmptyCompany({ onSetup }: { onSetup: () => void }) {
         <p className="text-sm text-muted-foreground mt-1 max-w-xs">
           Configure os dados da empresa para emissão de notas fiscais e operação do ERP.
         </p>
-        <Button className="mt-4" onClick={onSetup}>
-          Cadastrar empresa
-        </Button>
+        <Button className="mt-4" onClick={onSetup}>Cadastrar empresa</Button>
       </div>
     </div>
   )
