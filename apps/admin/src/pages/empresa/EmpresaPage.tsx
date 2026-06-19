@@ -14,6 +14,17 @@ import { cn } from '@/lib/utils'
 import { api } from '@/lib/api'
 import { UnidadesPage } from '@/pages/unidades/UnidadesPage'
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function maskPhone(raw: string): string {
+  const d = raw.replace(/\D/g, '').slice(0, 11)
+  if (!d) return ''
+  if (d.length <= 2) return `(${d}`
+  if (d.length <= 6) return `(${d.slice(0, 2)}) ${d.slice(2)}`
+  if (d.length <= 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`
+  return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type RegimeTributario = 'SIMPLES' | 'LUCRO_PRESUMIDO' | 'LUCRO_REAL'
@@ -561,7 +572,7 @@ export function EmpresaPage() {
                         <div key={p.id} className="flex items-center justify-between gap-3">
                           <div className="flex items-center gap-2 text-sm">
                             <span className="text-foreground font-medium">
-                              {p.ddi ? `${p.ddi} ` : ''}{p.numero}
+                              {p.ddi ? `${p.ddi} ` : ''}{maskPhone(p.numero)}
                             </span>
                             <span className="text-xs text-muted-foreground px-1.5 py-0.5 rounded bg-muted">
                               {TIPO_TELEFONE_LABEL[p.tipo]}
@@ -804,8 +815,8 @@ export function EmpresaPage() {
               </div>
               <div className="col-span-2 space-y-1.5">
                 <label htmlFor="phone-numero" className="text-sm font-medium text-foreground">Número *</label>
-                <Input id="phone-numero" value={phoneForm.numero} placeholder="11987654321"
-                  onChange={(e) => setPhoneForm((f) => ({ ...f, numero: e.target.value }))} />
+                <Input id="phone-numero" value={maskPhone(phoneForm.numero)} placeholder="(11) 99999-9999" maxLength={15}
+                  onChange={(e) => setPhoneForm((f) => ({ ...f, numero: e.target.value.replace(/\D/g, '') }))} />
               </div>
             </div>
             <div className="flex items-center gap-3">
