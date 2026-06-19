@@ -3,6 +3,7 @@ import { Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ProdutosFilter, type ProdutosFiltros, type NamedItem } from './components/ProdutosFilter'
 import { ProdutosTable } from './components/ProdutosTable'
+import { NovoProdutoModal } from './components/NovoProdutoModal'
 import { api } from '@/lib/api'
 import { type Product, type ProductListResponse } from './types'
 
@@ -34,6 +35,7 @@ export function ProdutosPage() {
   const [error, setError] = useState(false)
   const [categorias, setCategorias] = useState<NamedItem[]>([])
   const [marcas, setMarcas] = useState<NamedItem[]>([])
+  const [showNovoProduto, setShowNovoProduto] = useState(false)
 
   useEffect(() => {
     api.get<CategoryFlat[]>('/categories/flat').then((r) =>
@@ -95,7 +97,7 @@ export function ProdutosPage() {
             </p>
           )}
         </div>
-        <Button className="gap-2">
+        <Button className="gap-2" onClick={() => setShowNovoProduto(true)}>
           <Plus className="h-4 w-4" />
           Novo produto
         </Button>
@@ -124,6 +126,17 @@ export function ProdutosPage() {
         limit={LIMIT}
         total={total}
         onPageChange={setPage}
+      />
+
+      <NovoProdutoModal
+        open={showNovoProduto}
+        onClose={() => setShowNovoProduto(false)}
+        onSuccess={() => {
+          setShowNovoProduto(false)
+          setPage(1)
+        }}
+        categorias={categorias}
+        marcas={marcas}
       />
     </div>
   )
