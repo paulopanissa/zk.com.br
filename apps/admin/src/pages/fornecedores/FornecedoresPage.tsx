@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Edit2, Plus, Search, Trash2 } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { Edit2, Eye, Plus, Search, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -70,6 +71,7 @@ function formatDocument(doc: string): string {
 }
 
 export function FornecedoresPage() {
+  const navigate = useNavigate()
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
@@ -336,6 +338,15 @@ export function FornecedoresPage() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                        title="Ver detalhes"
+                        onClick={() => navigate(`/fornecedores/${supplier.id}`)}
+                      >
+                        <Eye className="h-3.5 w-3.5" />
+                      </Button>
                       <Button
                         variant="ghost"
                         size="icon"

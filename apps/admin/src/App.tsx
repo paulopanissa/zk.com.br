@@ -16,6 +16,7 @@ import { PedidoDetalhe } from '@/pages/pedidos/PedidoDetalhe'
 import { CategoriasPage } from '@/pages/categorias/CategoriasPage'
 import { MarcasPage } from '@/pages/marcas/MarcasPage'
 import { FornecedoresPage } from '@/pages/fornecedores/FornecedoresPage'
+import { FornecedorDetalhe } from '@/pages/fornecedores/FornecedorDetalhe'
 
 function AppRoutes() {
   return (
@@ -40,6 +41,7 @@ function AppRoutes() {
                 <Route path="/categorias" element={<CategoriasPage />} />
                 <Route path="/marcas" element={<MarcasPage />} />
                 <Route path="/fornecedores" element={<FornecedoresPage />} />
+                <Route path="/fornecedores/:id" element={<FornecedorDetalhe />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </AdminShell>
