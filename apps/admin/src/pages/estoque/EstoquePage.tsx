@@ -1,6 +1,5 @@
-import { useMemo, useState } from 'react'
-import { Search, X } from 'lucide-react'
-import { Input } from '@/components/ui/input'
+import { useCallback, useEffect, useState } from 'react'
+import { X } from 'lucide-react'
 import {
   Select,
   SelectContent,
@@ -11,19 +10,19 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { LotesTable } from './components/LotesTable'
+import { api } from '@/lib/api'
+import { EstoqueTable } from './components/EstoqueTable'
 import { MovimentacoesTable } from './components/MovimentacoesTable'
 import {
-  LOTES_MOCK,
-  MOVIMENTACOES_MOCK,
-  getLoteStatus,
-  type LoteStatus,
+  type StockSummaryItem,
+  type StockSummaryResponse,
+  type StockMovement,
   type StockMovementType,
-} from '@/data/estoque.mock'
+  type MovementsResponse,
+} from './types'
 
-const LIMIT = 10
+const LIMIT = 20
 
-type StatusFiltro = 'all' | LoteStatus
 type TipoFiltro = 'all' | StockMovementType
 
 function ToggleChip({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
@@ -44,109 +43,119 @@ function ToggleChip({ label, active, onClick }: { label: string; active: boolean
 }
 
 export function EstoquePage() {
-  // --- lotes filters ---
-  const [lotesBusca, setLotesBusca] = useState('')
-  const [lotesStatus, setLotesStatus] = useState<StatusFiltro>('all')
-  const [lotesPage, setLotesPage] = useState(1)
+  // ── Resumo tab ─────────────────────────────────────────────────────────────────
+  const [estoque, setEstoque] = useState<StockSummaryItem[]>([])
+  const [estoqueTotal, setEstoqueTotal] = useState(0)
+  const [estoquePage, setEstoquePage] = useState(1)
+  const [estoqueLoading, setEstoqueLoading] = useState(false)
+  const [estoqueError, setEstoqueError] = useState(false)
+  const [lowStock, setLowStock] = useState(false)
 
-  // --- movimentações filters ---
-  const [movBusca, setMovBusca] = useState('')
-  const [movTipo, setMovTipo] = useState<TipoFiltro>('all')
+  // ── Movimentações tab ──────────────────────────────────────────────────────────
+  const [movimentacoes, setMovimentacoes] = useState<StockMovement[]>([])
+  const [movTotal, setMovTotal] = useState(0)
   const [movPage, setMovPage] = useState(1)
+  const [movLoading, setMovLoading] = useState(false)
+  const [movError, setMovError] = useState(false)
+  const [movTipo, setMovTipo] = useState<TipoFiltro>('all')
 
-  const lotesFiltrados = useMemo(() => {
-    const busca = lotesBusca.toLowerCase()
-    return LOTES_MOCK.filter((l) => {
-      if (
-        busca &&
-        !l.productName.toLowerCase().includes(busca) &&
-        !l.sku.toLowerCase().includes(busca) &&
-        !l.code.toLowerCase().includes(busca)
-      )
-        return false
-      if (lotesStatus !== 'all' && getLoteStatus(l) !== lotesStatus) return false
-      return true
-    })
-  }, [lotesBusca, lotesStatus])
+  const [activeTab, setActiveTab] = useState<'resumo' | 'movimentacoes'>('resumo')
 
-  const movFiltradas = useMemo(() => {
-    const busca = movBusca.toLowerCase()
-    return MOVIMENTACOES_MOCK.filter((m) => {
-      if (
-        busca &&
-        !m.productName.toLowerCase().includes(busca) &&
-        !m.sku.toLowerCase().includes(busca) &&
-        !m.lotCode.toLowerCase().includes(busca)
-      )
-        return false
-      if (movTipo !== 'all' && m.type !== movTipo) return false
-      return true
-    })
-  }, [movBusca, movTipo])
+  const loadEstoque = useCallback(async (signal?: AbortSignal) => {
+    setEstoqueLoading(true)
+    setEstoqueError(false)
+    try {
+      const params: Record<string, string | number | boolean> = { page: estoquePage, limit: LIMIT }
+      if (lowStock) params.low_stock = true
+      const r = await api.get<StockSummaryResponse>('/stock', { params, signal })
+      setEstoque(r.data.data)
+      setEstoqueTotal(r.data.total)
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === 'CanceledError') return
+      setEstoqueError(true)
+    } finally {
+      setEstoqueLoading(false)
+    }
+  }, [estoquePage, lowStock])
 
-  const lotesPaginados = lotesFiltrados.slice((lotesPage - 1) * LIMIT, lotesPage * LIMIT)
-  const movPaginadas = movFiltradas.slice((movPage - 1) * LIMIT, movPage * LIMIT)
+  const loadMovimentacoes = useCallback(async (signal?: AbortSignal) => {
+    setMovLoading(true)
+    setMovError(false)
+    try {
+      const params: Record<string, string | number> = { page: movPage, limit: LIMIT }
+      if (movTipo !== 'all') params.type = movTipo
+      const r = await api.get<MovementsResponse>('/stock/movements', { params, signal })
+      setMovimentacoes(r.data.data)
+      setMovTotal(r.data.total)
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === 'CanceledError') return
+      setMovError(true)
+    } finally {
+      setMovLoading(false)
+    }
+  }, [movPage, movTipo])
 
-  const temFiltroLotes = lotesBusca || lotesStatus !== 'all'
-  const temFiltroMov = movBusca || movTipo !== 'all'
+  useEffect(() => {
+    const controller = new AbortController()
+    loadEstoque(controller.signal)
+    return () => controller.abort()
+  }, [loadEstoque])
 
-  const criticos = LOTES_MOCK.filter((l) => getLoteStatus(l) === 'critico').length
-  const vencidos = LOTES_MOCK.filter((l) => getLoteStatus(l) === 'vencido').length
+  useEffect(() => {
+    if (activeTab !== 'movimentacoes') return
+    const controller = new AbortController()
+    loadMovimentacoes(controller.signal)
+    return () => controller.abort()
+  }, [activeTab, loadMovimentacoes])
+
+  function handleLowStockToggle() {
+    setLowStock((p) => !p)
+    setEstoquePage(1)
+  }
+
+  function handleMovTipo(v: string) {
+    setMovTipo(v as TipoFiltro)
+    setMovPage(1)
+  }
+
+  const lowStockCount = estoque.filter((i) => i.is_low_stock).length
 
   return (
     <div className="p-6 space-y-5">
       <div>
         <h1 className="font-display text-3xl font-bold text-foreground">Estoque</h1>
         <div className="flex items-center gap-4 mt-1">
-          <p className="text-sm text-muted-foreground">{LOTES_MOCK.length} lotes cadastrados</p>
-          {criticos > 0 && (
-            <span className="text-xs font-medium text-warning">{criticos} crítico{criticos !== 1 ? 's' : ''}</span>
+          {estoqueError ? (
+            <p className="text-sm text-muted-foreground">— produtos com movimentação</p>
+          ) : (
+            <p className="text-sm text-muted-foreground">{estoqueTotal} produto{estoqueTotal !== 1 ? 's' : ''} com movimentação</p>
           )}
-          {vencidos > 0 && (
-            <span className="text-xs font-medium text-destructive">{vencidos} vencido{vencidos !== 1 ? 's' : ''}</span>
+          {!estoqueLoading && !estoqueError && lowStockCount > 0 && (
+            <span className="text-xs font-medium text-warning">{lowStockCount} abaixo do mínimo (nesta página)</span>
           )}
         </div>
       </div>
 
-      <Tabs defaultValue="lotes">
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)}>
         <TabsList className="mb-2">
-          <TabsTrigger value="lotes">Lotes</TabsTrigger>
+          <TabsTrigger value="resumo">Resumo</TabsTrigger>
           <TabsTrigger value="movimentacoes">Movimentações</TabsTrigger>
         </TabsList>
 
-        {/* ── TAB LOTES ── */}
-        <TabsContent value="lotes" className="space-y-4">
+        {/* ── TAB RESUMO ── */}
+        <TabsContent value="resumo" className="space-y-4">
           <div className="rounded-lg border border-border bg-card p-4 shadow-sm">
             <div className="flex flex-wrap items-center gap-3">
-              <div className="relative min-w-[200px] flex-1">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder="Buscar por produto, SKU ou código do lote"
-                  value={lotesBusca}
-                  onChange={(e) => { setLotesBusca(e.target.value); setLotesPage(1) }}
-                  className="pl-9"
-                />
-              </div>
-
-              <div className="flex items-center gap-2">
-                {(['normal', 'critico', 'vencido'] as LoteStatus[]).map((s) => (
-                  <ToggleChip
-                    key={s}
-                    label={s.charAt(0).toUpperCase() + s.slice(1)}
-                    active={lotesStatus === s}
-                    onClick={() => {
-                      setLotesStatus((p) => (p === s ? 'all' : s))
-                      setLotesPage(1)
-                    }}
-                  />
-                ))}
-              </div>
-
-              {temFiltroLotes && (
+              <ToggleChip
+                label="Baixo estoque"
+                active={lowStock}
+                onClick={handleLowStockToggle}
+              />
+              {lowStock && (
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => { setLotesBusca(''); setLotesStatus('all'); setLotesPage(1) }}
+                  onClick={() => { setLowStock(false); setEstoquePage(1) }}
                   className="text-muted-foreground"
                 >
                   <X className="mr-1 h-3.5 w-3.5" />
@@ -156,12 +165,22 @@ export function EstoquePage() {
             </div>
           </div>
 
-          <LotesTable
-            lotes={lotesPaginados}
-            page={lotesPage}
+          {estoqueError && (
+            <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+              Não foi possível carregar o estoque.{' '}
+              <button className="underline font-medium" onClick={() => loadEstoque()}>
+                Tentar novamente
+              </button>
+            </div>
+          )}
+
+          <EstoqueTable
+            items={estoque}
+            loading={estoqueLoading}
+            page={estoquePage}
             limit={LIMIT}
-            total={lotesFiltrados.length}
-            onPageChange={setLotesPage}
+            total={estoqueTotal}
+            onPageChange={setEstoquePage}
           />
         </TabsContent>
 
@@ -169,21 +188,8 @@ export function EstoquePage() {
         <TabsContent value="movimentacoes" className="space-y-4">
           <div className="rounded-lg border border-border bg-card p-4 shadow-sm">
             <div className="flex flex-wrap items-center gap-3">
-              <div className="relative min-w-[200px] flex-1">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder="Buscar por produto, SKU ou lote"
-                  value={movBusca}
-                  onChange={(e) => { setMovBusca(e.target.value); setMovPage(1) }}
-                  className="pl-9"
-                />
-              </div>
-
-              <Select
-                value={movTipo}
-                onValueChange={(v) => { setMovTipo(v as TipoFiltro); setMovPage(1) }}
-              >
-                <SelectTrigger className="w-[200px]">
+              <Select value={movTipo} onValueChange={handleMovTipo}>
+                <SelectTrigger className="w-[210px]">
                   <SelectValue placeholder="Tipo de movimentação" />
                 </SelectTrigger>
                 <SelectContent>
@@ -199,11 +205,11 @@ export function EstoquePage() {
                 </SelectContent>
               </Select>
 
-              {temFiltroMov && (
+              {movTipo !== 'all' && (
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => { setMovBusca(''); setMovTipo('all'); setMovPage(1) }}
+                  onClick={() => { setMovTipo('all'); setMovPage(1) }}
                   className="text-muted-foreground"
                 >
                   <X className="mr-1 h-3.5 w-3.5" />
@@ -213,11 +219,21 @@ export function EstoquePage() {
             </div>
           </div>
 
+          {movError && (
+            <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+              Não foi possível carregar as movimentações.{' '}
+              <button className="underline font-medium" onClick={() => loadMovimentacoes()}>
+                Tentar novamente
+              </button>
+            </div>
+          )}
+
           <MovimentacoesTable
-            movimentacoes={movPaginadas}
+            movimentacoes={movimentacoes}
+            loading={movLoading}
             page={movPage}
             limit={LIMIT}
-            total={movFiltradas.length}
+            total={movTotal}
             onPageChange={setMovPage}
           />
         </TabsContent>
