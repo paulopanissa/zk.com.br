@@ -1,0 +1,999 @@
+diff --git a/apps/admin/src/pages/clientes/ClienteDetalhe.tsx b/apps/admin/src/pages/clientes/ClienteDetalhe.tsx
+index 6a0c213..ef430f3 100644
+--- a/apps/admin/src/pages/clientes/ClienteDetalhe.tsx
++++ b/apps/admin/src/pages/clientes/ClienteDetalhe.tsx
+@@ -1,15 +1,15 @@
++import { useEffect, useState } from 'react'
+ import { useNavigate, useParams } from 'react-router-dom'
+-import { ArrowLeft, Shield, MapPin, ShoppingBag, CheckCircle, XCircle, Clock } from 'lucide-react'
++import { ArrowLeft, Shield, ShoppingBag, CheckCircle, XCircle, Clock, Loader2, AlertCircle, Lock } from 'lucide-react'
+ import { Badge } from '@/components/ui/badge'
+ import { Button } from '@/components/ui/button'
+ import { cn } from '@/lib/utils'
+-import { maskCep, maskPhone } from '@/lib/formatters'
+-import { CLIENTES_MOCK, CLIENTE_DETALHE_MOCK, type PedidoClienteMock } from '@/data/clientes.mock'
++import { maskPhone } from '@/lib/formatters'
++import { api } from '@/lib/api'
++import { type Cliente, type VendaResumo, type VendaResumoResponse } from './types'
+ 
+ function formatBRL(centavos: number) {
+-  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
+-    centavos / 100,
+-  )
++  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(centavos / 100)
+ }
+ 
+ function formatDate(iso: string) {
+@@ -20,16 +20,16 @@ function formatDateTime(iso: string) {
+   return new Date(iso).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
+ }
+ 
+-const STATUS_CONFIG: Record<PedidoClienteMock['status'], { label: string; icon: React.ElementType; className: string }> = {
++const VENDA_STATUS_CONFIG: Record<VendaResumo['status'], { label: string; icon: React.ElementType; className: string }> = {
+   FINALIZADA: { label: 'Finalizada', icon: CheckCircle, className: 'text-success bg-success/10 border-success/30' },
+-  CANCELADA: { label: 'Cancelada', icon: XCircle, className: 'text-danger bg-danger/10 border-danger/30' },
+-  ABERTA: { label: 'Em aberto', icon: Clock, className: 'text-warning bg-warning/10 border-warning/30' },
++  CANCELADA:  { label: 'Cancelada',  icon: XCircle,      className: 'text-destructive bg-destructive/10 border-destructive/30' },
++  ABERTA:     { label: 'Em aberto',  icon: Clock,        className: 'text-warning bg-warning/10 border-warning/30' },
+ }
+ 
+-const ORIGEM_LABEL: Record<string, string> = {
+-  PDV: 'PDV',
+-  ECOMMERCE: 'E-commerce',
+-  WHATSAPP: 'WhatsApp',
++const ORIGEM_LABEL: Record<VendaResumo['origem'], string> = {
++  PDV:         'PDV',
++  ECOMMERCE:   'E-commerce',
++  PDV_OFFLINE: 'PDV Offline',
+ }
+ 
+ function Field({ label, value }: { label: string; value: string }) {
+@@ -57,10 +57,53 @@ export function ClienteDetalhe() {
+   const { id } = useParams<{ id: string }>()
+   const navigate = useNavigate()
+ 
+-  const base = CLIENTES_MOCK.find((c) => c.id === id)
+-  const detalhe = id ? CLIENTE_DETALHE_MOCK[id] : undefined
++  const [cliente, setCliente] = useState<Cliente | null>(null)
++  const [vendas, setVendas] = useState<VendaResumo[]>([])
++  const [vendasTotal, setVendasTotal] = useState(0)
++  const [loading, setLoading] = useState(true)
++  const [notFound, setNotFound] = useState(false)
++  const [clienteError, setClienteError] = useState(false)
++  const [vendasError, setVendasError] = useState(false)
++
++  useEffect(() => {
++    if (!id) return
++    setLoading(true)
++    setNotFound(false)
++    setClienteError(false)
++    setVendasError(false)
+ 
+-  if (!base) {
++    Promise.all([
++      api.get<Cliente>(`/customers/${id}`).catch((err: unknown) => {
++        const status = (err as { response?: { status?: number } })?.response?.status
++        if (status === 404) setNotFound(true)
++        else setClienteError(true)
++        return null
++      }),
++      api.get<VendaResumoResponse>('/vendas', { params: { cliente_id: id, limit: 20, page: 1 } }).catch(() => {
++        setVendasError(true)
++        return null
++      }),
++    ]).then(([clienteRes, vendasRes]) => {
++      if (clienteRes) setCliente(clienteRes.data)
++      if (vendasRes) {
++        setVendas(vendasRes.data.data)
++        setVendasTotal(vendasRes.data.total)
++      }
++    }).finally(() => setLoading(false))
++  }, [id])
++
++  if (loading) {
++    return (
++      <div className="p-6">
++        <div className="flex items-center gap-2 text-muted-foreground">
++          <Loader2 className="h-4 w-4 animate-spin" />
++          <span className="text-sm">Carregando…</span>
++        </div>
++      </div>
++    )
++  }
++
++  if (notFound || (!loading && !cliente && !clienteError)) {
+     return (
+       <div className="p-6">
+         <Button variant="ghost" onClick={() => navigate('/clientes')} className="mb-4">
+@@ -72,11 +115,24 @@ export function ClienteDetalhe() {
+     )
+   }
+ 
+-  const pedidos = detalhe?.pedidos ?? []
+-  const pedidosFinalizados = pedidos.filter((p) => p.status === 'FINALIZADA')
+-  const totalGasto = pedidosFinalizados.reduce((s, p) => s + p.totalLiquidoCentavos, 0)
+-  const ticketMedio = pedidosFinalizados.length > 0 ? totalGasto / pedidosFinalizados.length : 0
+-  const ultimoPedido = pedidos[0]
++  if (clienteError) {
++    return (
++      <div className="p-6">
++        <Button variant="ghost" onClick={() => navigate('/clientes')} className="mb-4">
++          <ArrowLeft className="mr-2 h-4 w-4" />
++          Voltar para clientes
++        </Button>
++        <div className="flex items-center gap-2 text-destructive text-sm">
++          <AlertCircle className="h-4 w-4" />
++          <span>Não foi possível carregar o cliente. Tente novamente.</span>
++        </div>
++      </div>
++    )
++  }
++
++  if (!cliente) return null
++
++  const ultimoPedido = vendas[0]
+ 
+   return (
+     <div className="p-6 space-y-6">
+@@ -88,18 +144,18 @@ export function ClienteDetalhe() {
+         <div className="flex-1">
+           <div className="flex items-center gap-3">
+             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary font-semibold">
+-              {base.nome.split(' ').slice(0, 2).map((n) => n[0]).join('')}
++              {cliente.nome.split(' ').slice(0, 2).map((n) => n[0]).join('')}
+             </div>
+             <div>
+-              <h1 className="font-display text-2xl font-bold text-foreground">{base.nome}</h1>
++              <h1 className="font-display text-2xl font-bold text-foreground">{cliente.nome}</h1>
+               <div className="flex items-center gap-2 mt-0.5">
+                 <Badge
+                   variant="outline"
+-                  className={cn('text-xs', base.ativo ? 'border-success/40 bg-success/10 text-success' : 'border-border text-muted-foreground')}
++                  className={cn('text-xs', cliente.ativo ? 'border-success/40 bg-success/10 text-success' : 'border-border text-muted-foreground')}
+                 >
+-                  {base.ativo ? 'Ativo' : 'Inativo'}
++                  {cliente.ativo ? 'Ativo' : 'Inativo'}
+                 </Badge>
+-                {base.consentimentoLgpd && (
++                {cliente.consentimento_lgpd && (
+                   <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                     <Shield className="h-3 w-3" />
+                     Consentimento LGPD
+@@ -112,12 +168,11 @@ export function ClienteDetalhe() {
+       </div>
+ 
+       {/* KPIs */}
+-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
++      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+         {[
+-          { label: 'Total de pedidos', value: String(base.totalPedidos) },
+-          { label: 'Total gasto', value: formatBRL(totalGasto || base.totalGastoCentavos) },
+-          { label: 'Ticket médio', value: formatBRL(ticketMedio) },
+-          { label: 'Último pedido', value: ultimoPedido ? formatDate(ultimoPedido.criadoEm) : '—' },
++          { label: 'Total de pedidos', value: String(vendasTotal) },
++          { label: 'Cadastrado em', value: formatDate(cliente.created_at) },
++          { label: 'Último pedido', value: ultimoPedido ? formatDate(ultimoPedido.created_at) : '—' },
+         ].map((kpi) => (
+           <div key={kpi.label} className="rounded-xl border border-border bg-card p-4 shadow-sm">
+             <p className="text-xs font-medium text-muted-foreground">{kpi.label}</p>
+@@ -126,46 +181,33 @@ export function ClienteDetalhe() {
+         ))}
+       </div>
+ 
+-      {/* Dados pessoais */}
+-      <Section title="Dados pessoais" icon={Shield}>
++      {/* Dados de contato */}
++      <Section title="Dados de contato" icon={Shield}>
+         <div className="grid grid-cols-2 gap-x-8 gap-y-4 sm:grid-cols-3">
+-          <Field label="Nome completo" value={base.nome} />
+-          <Field label="CPF/CNPJ" value={base.cpfCnpjMascarado} />
+-          <Field label="Data de nascimento" value={detalhe?.dataNascimento ? formatDate(detalhe.dataNascimento) : '***'} />
+-          <Field label="E-mail" value={base.email} />
+-          <Field label="Telefone" value={base.telefonePrincipal ? maskPhone(base.telefonePrincipal) : ''} />
+-          <Field label="Cadastrado em" value={formatDate(base.dataCadastro)} />
++          <Field label="Nome completo" value={cliente.nome} />
++          <Field label="E-mail" value={cliente.email ?? '—'} />
++          <Field label="Telefone" value={cliente.telefone_principal ? maskPhone(cliente.telefone_principal) : '—'} />
++          <div>
++            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">CPF/CNPJ</p>
++            <div className="mt-0.5 flex items-center gap-1.5 text-sm text-muted-foreground">
++              <Lock className="h-3 w-3 shrink-0" />
++              <span>Protegido (LGPD)</span>
++            </div>
++          </div>
++          {cliente.consentimento_lgpd && cliente.consentimento_em && (
++            <Field label="Consentimento em" value={formatDate(cliente.consentimento_em)} />
++          )}
+         </div>
+       </Section>
+ 
+-      {/* Endereços */}
+-      {detalhe?.enderecos && detalhe.enderecos.length > 0 && (
+-        <Section title="Endereços" icon={MapPin}>
+-          <div className="space-y-3">
+-            {detalhe.enderecos.map((end) => (
+-              <div key={end.id} className="rounded-lg border border-border px-4 py-3 flex items-start justify-between gap-4">
+-                <div>
+-                  <p className="text-sm text-foreground">
+-                    {end.logradouro}, {end.numero}{end.complemento ? `, ${end.complemento}` : ''} — {end.bairro}
+-                  </p>
+-                  <p className="text-xs text-muted-foreground mt-0.5">
+-                    {end.cidade}/{end.uf} · CEP {maskCep(end.cep)}
+-                  </p>
+-                </div>
+-                {end.principal && (
+-                  <Badge variant="outline" className="text-[10px] shrink-0 border-primary/30 text-primary bg-primary/5">
+-                    Principal
+-                  </Badge>
+-                )}
+-              </div>
+-            ))}
+-          </div>
+-        </Section>
+-      )}
+-
+       {/* Histórico de pedidos */}
+-      <Section title={`Pedidos (${pedidos.length})`} icon={ShoppingBag}>
+-        {pedidos.length === 0 ? (
++      <Section title={`Pedidos (${vendasTotal})`} icon={ShoppingBag}>
++        {vendasError ? (
++          <div className="flex items-center gap-2 text-sm text-destructive">
++            <AlertCircle className="h-4 w-4" />
++            <span>Não foi possível carregar os pedidos.</span>
++          </div>
++        ) : vendas.length === 0 ? (
+           <p className="text-sm text-muted-foreground">Nenhum pedido ainda.</p>
+         ) : (
+           <div className="overflow-x-auto">
+@@ -186,19 +228,19 @@ export function ClienteDetalhe() {
+                 </tr>
+               </thead>
+               <tbody>
+-                {pedidos.map((p, i) => {
+-                  const sc = STATUS_CONFIG[p.status]
++                {vendas.map((v, i) => {
++                  const sc = VENDA_STATUS_CONFIG[v.status]
+                   const Icon = sc.icon
+                   return (
+-                    <tr key={p.id} className={cn('border-b border-border/50', i % 2 === 1 && 'bg-muted/10')}>
+-                      <td className="py-2.5 pr-4 font-mono text-xs text-foreground">#{p.numero}</td>
+-                      <td className="py-2.5 pr-4 text-muted-foreground tabular-nums">{formatDateTime(p.criadoEm)}</td>
+-                      <td className="py-2.5 pr-4 text-muted-foreground">{ORIGEM_LABEL[p.origem]}</td>
++                    <tr key={v.id} className={cn('border-b border-border/50', i % 2 === 1 && 'bg-muted/10')}>
++                      <td className="py-2.5 pr-4 font-mono text-xs text-foreground">#{v.numero}</td>
++                      <td className="py-2.5 pr-4 text-muted-foreground tabular-nums">{formatDateTime(v.created_at)}</td>
++                      <td className="py-2.5 pr-4 text-muted-foreground">{ORIGEM_LABEL[v.origem]}</td>
+                       <td className="py-2.5 pr-4 text-right tabular-nums text-muted-foreground">
+-                        {p.descontoTotalCentavos > 0 ? `-${formatBRL(p.descontoTotalCentavos)}` : '—'}
++                        {v.desconto_total_centavos > 0 ? `-${formatBRL(v.desconto_total_centavos)}` : '—'}
+                       </td>
+                       <td className="py-2.5 pr-4 text-right font-medium tabular-nums text-foreground">
+-                        {formatBRL(p.totalLiquidoCentavos)}
++                        {formatBRL(v.total_liquido_centavos)}
+                       </td>
+                       <td className="py-2.5 text-center">
+                         <span className={cn('inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium', sc.className)}>
+@@ -211,6 +253,11 @@ export function ClienteDetalhe() {
+                 })}
+               </tbody>
+             </table>
++            {vendasTotal > vendas.length && (
++              <p className="text-xs text-muted-foreground mt-3">
++                Mostrando {vendas.length} de {vendasTotal} pedidos. Acesse a página de Pedidos para ver todos.
++              </p>
++            )}
+           </div>
+         )}
+       </Section>
+diff --git a/apps/admin/src/pages/clientes/ClientesPage.tsx b/apps/admin/src/pages/clientes/ClientesPage.tsx
+index a8069c8..83e119c 100644
+--- a/apps/admin/src/pages/clientes/ClientesPage.tsx
++++ b/apps/admin/src/pages/clientes/ClientesPage.tsx
+@@ -1,40 +1,42 @@
+-import { useMemo, useState } from 'react'
++import { useCallback, useEffect, useState } from 'react'
+ import { ClientesFilter, type ClientesFiltros } from './components/ClientesFilter'
+ import { ClientesTable } from './components/ClientesTable'
+-import { CLIENTES_MOCK } from '@/data/clientes.mock'
++import { api } from '@/lib/api'
++import { type Cliente, type ClienteListResponse } from './types'
+ 
+-const LIMIT = 10
+-
+-const UFS = [...new Set(CLIENTES_MOCK.map((c) => c.uf))].sort()
++const LIMIT = 20
+ 
+ export function ClientesPage() {
++  const [clientes, setClientes] = useState<Cliente[]>([])
++  const [total, setTotal] = useState(0)
++  const [page, setPage] = useState(1)
++  const [loading, setLoading] = useState(false)
++  const [error, setError] = useState(false)
+   const [filtros, setFiltros] = useState<ClientesFiltros>({
+     busca: '',
+-    uf: 'all',
+     somenteAtivos: false,
+-    comConsentimento: false,
+   })
+-  const [page, setPage] = useState(1)
+ 
+-  const clientesFiltrados = useMemo(() => {
+-    const busca = filtros.busca.toLowerCase()
+-    return CLIENTES_MOCK.filter((c) => {
+-      if (
+-        busca &&
+-        !c.nome.toLowerCase().includes(busca) &&
+-        !c.email.toLowerCase().includes(busca) &&
+-        !c.telefonePrincipal.includes(busca)
+-      )
+-        return false
+-      if (filtros.uf !== 'all' && c.uf !== filtros.uf) return false
+-      if (filtros.somenteAtivos && !c.ativo) return false
+-      if (filtros.comConsentimento && !c.consentimentoLgpd) return false
+-      return true
+-    })
+-  }, [filtros])
++  const loadClientes = useCallback(async () => {
++    setLoading(true)
++    setError(false)
++    try {
++      const params: Record<string, string | number | boolean> = { page, limit: LIMIT }
++      if (filtros.busca.trim()) params.q = filtros.busca.trim()
++      if (filtros.somenteAtivos) params.ativo = true
++      const r = await api.get<ClienteListResponse>('/customers', { params })
++      setClientes(r.data.data)
++      setTotal(r.data.total)
++    } catch {
++      setError(true)
++    } finally {
++      setLoading(false)
++    }
++  }, [page, filtros])
+ 
+-  const total = clientesFiltrados.length
+-  const paginados = clientesFiltrados.slice((page - 1) * LIMIT, page * LIMIT)
++  useEffect(() => {
++    loadClientes()
++  }, [loadClientes])
+ 
+   function handleFiltrosChange(novosFiltros: ClientesFiltros) {
+     setFiltros(novosFiltros)
+@@ -46,14 +48,26 @@ export function ClientesPage() {
+       <div className="flex items-center justify-between">
+         <div>
+           <h1 className="font-display text-3xl font-bold text-foreground">Clientes</h1>
+-          <p className="text-sm text-muted-foreground mt-1">{CLIENTES_MOCK.length} clientes cadastrados</p>
++          <p className="text-sm text-muted-foreground mt-1">
++            {total} cliente{total !== 1 ? 's' : ''} cadastrado{total !== 1 ? 's' : ''}
++          </p>
+         </div>
+       </div>
+ 
+-      <ClientesFilter filtros={filtros} ufs={UFS} onChange={handleFiltrosChange} />
++      <ClientesFilter filtros={filtros} onChange={handleFiltrosChange} />
++
++      {error && (
++        <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
++          Não foi possível carregar os clientes.{' '}
++          <button className="underline font-medium" onClick={loadClientes}>
++            Tentar novamente
++          </button>
++        </div>
++      )}
+ 
+       <ClientesTable
+-        clientes={paginados}
++        clientes={clientes}
++        loading={loading}
+         page={page}
+         limit={LIMIT}
+         total={total}
+diff --git a/apps/admin/src/pages/clientes/components/ClientesFilter.tsx b/apps/admin/src/pages/clientes/components/ClientesFilter.tsx
+index a76951e..7de429b 100644
+--- a/apps/admin/src/pages/clientes/components/ClientesFilter.tsx
++++ b/apps/admin/src/pages/clientes/components/ClientesFilter.tsx
+@@ -1,41 +1,27 @@
+ import { Search, X } from 'lucide-react'
+ import { Input } from '@/components/ui/input'
+-import {
+-  Select,
+-  SelectContent,
+-  SelectItem,
+-  SelectTrigger,
+-  SelectValue,
+-} from '@/components/ui/select'
+ import { Button } from '@/components/ui/button'
+ import { cn } from '@/lib/utils'
+ 
+ export interface ClientesFiltros {
+   busca: string
+-  uf: string
+   somenteAtivos: boolean
+-  comConsentimento: boolean
+ }
+ 
+ interface ClientesFilterProps {
+   filtros: ClientesFiltros
+-  ufs: string[]
+   onChange: (filtros: ClientesFiltros) => void
+ }
+ 
+-export function ClientesFilter({ filtros, ufs, onChange }: ClientesFilterProps) {
+-  const temFiltro =
+-    filtros.busca ||
+-    filtros.uf !== 'all' ||
+-    filtros.somenteAtivos ||
+-    filtros.comConsentimento
++export function ClientesFilter({ filtros, onChange }: ClientesFilterProps) {
++  const temFiltro = filtros.busca || filtros.somenteAtivos
+ 
+   function set<K extends keyof ClientesFiltros>(key: K, value: ClientesFiltros[K]) {
+     onChange({ ...filtros, [key]: value })
+   }
+ 
+   function limpar() {
+-    onChange({ busca: '', uf: 'all', somenteAtivos: false, comConsentimento: false })
++    onChange({ busca: '', somenteAtivos: false })
+   }
+ 
+   return (
+@@ -51,32 +37,11 @@ export function ClientesFilter({ filtros, ufs, onChange }: ClientesFilterProps)
+           />
+         </div>
+ 
+-        <Select value={filtros.uf} onValueChange={(v) => set('uf', v)}>
+-          <SelectTrigger className="w-[120px]">
+-            <SelectValue placeholder="Estado" />
+-          </SelectTrigger>
+-          <SelectContent>
+-            <SelectItem value="all">Todos os estados</SelectItem>
+-            {ufs.map((uf) => (
+-              <SelectItem key={uf} value={uf}>
+-                {uf}
+-              </SelectItem>
+-            ))}
+-          </SelectContent>
+-        </Select>
+-
+-        <div className="flex items-center gap-3">
+-          <ToggleChip
+-            label="Somente ativos"
+-            active={filtros.somenteAtivos}
+-            onClick={() => set('somenteAtivos', !filtros.somenteAtivos)}
+-          />
+-          <ToggleChip
+-            label="Com consentimento LGPD"
+-            active={filtros.comConsentimento}
+-            onClick={() => set('comConsentimento', !filtros.comConsentimento)}
+-          />
+-        </div>
++        <ToggleChip
++          label="Somente ativos"
++          active={filtros.somenteAtivos}
++          onClick={() => set('somenteAtivos', !filtros.somenteAtivos)}
++        />
+ 
+         {temFiltro && (
+           <Button variant="ghost" size="sm" onClick={limpar} className="text-muted-foreground">
+diff --git a/apps/admin/src/pages/clientes/components/ClientesTable.tsx b/apps/admin/src/pages/clientes/components/ClientesTable.tsx
+index d69b4a6..a9242fc 100644
+--- a/apps/admin/src/pages/clientes/components/ClientesTable.tsx
++++ b/apps/admin/src/pages/clientes/components/ClientesTable.tsx
+@@ -4,30 +4,45 @@ import { Badge } from '@/components/ui/badge'
+ import { Button } from '@/components/ui/button'
+ import { cn } from '@/lib/utils'
+ import { maskPhone } from '@/lib/formatters'
+-import { type ClienteMock } from '@/data/clientes.mock'
+-
+-function formatBRL(centavos: number) {
+-  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
+-    centavos / 100,
+-  )
+-}
++import { type Cliente } from '../types'
+ 
+ function formatDate(iso: string) {
+   return new Date(iso).toLocaleDateString('pt-BR')
+ }
+ 
+ interface ClientesTableProps {
+-  clientes: ClienteMock[]
++  clientes: Cliente[]
++  loading: boolean
+   page: number
+   limit: number
+   total: number
+   onPageChange: (page: number) => void
+ }
+ 
+-export function ClientesTable({ clientes, page, limit, total, onPageChange }: ClientesTableProps) {
++export function ClientesTable({ clientes, loading, page, limit, total, onPageChange }: ClientesTableProps) {
+   const navigate = useNavigate()
+   const totalPages = Math.ceil(total / limit)
+ 
++  if (loading && clientes.length === 0) {
++    return (
++      <div className="rounded-lg border border-border bg-card shadow-sm overflow-hidden">
++        <table className="w-full text-sm">
++          <tbody>
++            {Array.from({ length: 8 }).map((_, i) => (
++              <tr key={i} className="border-b border-border/50">
++                {[200, 180, 100, 80, 32].map((w, j) => (
++                  <td key={j} className="px-4 py-4">
++                    <div className="h-4 bg-muted/60 rounded animate-pulse" style={{ width: w }} />
++                  </td>
++                ))}
++              </tr>
++            ))}
++          </tbody>
++        </table>
++      </div>
++    )
++  }
++
+   if (clientes.length === 0) {
+     return <EmptyState />
+   }
+@@ -38,16 +53,22 @@ export function ClientesTable({ clientes, page, limit, total, onPageChange }: Cl
+         <table className="w-full text-sm">
+           <thead>
+             <tr className="border-b border-border bg-muted/30">
+-              {['Cliente', 'Contato', 'Cidade/UF', 'Cadastro', 'Total gasto', 'Pedidos', 'Status', ''].map((h) => (
++              {[
++                { key: 'cliente', label: 'Cliente' },
++                { key: 'contato', label: 'Contato' },
++                { key: 'cadastro', label: 'Cadastro' },
++                { key: 'status', label: 'Status' },
++                { key: 'action', label: '' },
++              ].map(({ key, label }) => (
+                 <th
+-                  key={h}
++                  key={key}
+                   className={cn(
+-                    'px-4 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground',
+-                    h === 'Total gasto' || h === 'Pedidos' ? 'text-right' : h === 'Status' ? 'text-center' : 'text-left',
+-                    h === '' && 'w-16',
++                    'px-4 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground text-left',
++                    key === 'status' && 'text-center',
++                    key === 'action' && 'w-16',
+                   )}
+                 >
+-                  {h}
++                  {label}
+                 </th>
+               ))}
+             </tr>
+@@ -68,37 +89,21 @@ export function ClientesTable({ clientes, page, limit, total, onPageChange }: Cl
+                     <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary font-semibold text-xs">
+                       {c.nome.split(' ').slice(0, 2).map((n) => n[0]).join('')}
+                     </div>
+-                    <div>
+-                      <p className="font-medium text-foreground">{c.nome}</p>
+-                      <p className="text-xs text-muted-foreground">{c.cpfCnpjMascarado}</p>
+-                    </div>
++                    <p className="font-medium text-foreground">{c.nome}</p>
+                   </div>
+                 </td>
+ 
+                 {/* Contato */}
+                 <td className="px-4 py-3">
+-                  <p className="text-foreground">{c.email}</p>
+-                  <p className="text-xs text-muted-foreground mt-0.5">{c.telefonePrincipal ? maskPhone(c.telefonePrincipal) : ''}</p>
+-                </td>
+-
+-                {/* Cidade/UF */}
+-                <td className="px-4 py-3 text-muted-foreground">
+-                  {c.cidade}/{c.uf}
++                  {c.email && <p className="text-foreground">{c.email}</p>}
++                  {c.telefone_principal && (
++                    <p className="text-xs text-muted-foreground mt-0.5">{maskPhone(c.telefone_principal)}</p>
++                  )}
+                 </td>
+ 
+                 {/* Cadastro */}
+                 <td className="px-4 py-3 text-muted-foreground tabular-nums">
+-                  {formatDate(c.dataCadastro)}
+-                </td>
+-
+-                {/* Total gasto */}
+-                <td className="px-4 py-3 text-right font-medium tabular-nums text-foreground">
+-                  {formatBRL(c.totalGastoCentavos)}
+-                </td>
+-
+-                {/* Pedidos */}
+-                <td className="px-4 py-3 text-right tabular-nums text-foreground">
+-                  {c.totalPedidos}
++                  {formatDate(c.created_at)}
+                 </td>
+ 
+                 {/* Status */}
+@@ -115,7 +120,7 @@ export function ClientesTable({ clientes, page, limit, total, onPageChange }: Cl
+                     >
+                       {c.ativo ? 'Ativo' : 'Inativo'}
+                     </Badge>
+-                    {c.consentimentoLgpd && (
++                    {c.consentimento_lgpd && (
+                       <span title="Consentimento LGPD">
+                         <Shield className="h-3 w-3 text-muted-foreground" />
+                       </span>
+diff --git a/apps/admin/src/pages/clientes/types.ts b/apps/admin/src/pages/clientes/types.ts
+new file mode 100644
+index 0000000..0b495df
+--- /dev/null
++++ b/apps/admin/src/pages/clientes/types.ts
+@@ -0,0 +1,39 @@
++export interface Cliente {
++  id: string
++  unidade_id: string
++  nome: string
++  telefone_principal: string | null
++  email: string | null
++  dados_dinamicos: Record<string, unknown> | null
++  consentimento_lgpd: boolean
++  consentimento_versao: string | null
++  consentimento_em: string | null
++  ativo: boolean
++  created_at: string
++  updated_at: string
++}
++
++export interface ClienteListResponse {
++  data: Cliente[]
++  total: number
++  page: number
++  limit: number
++}
++
++export interface VendaResumo {
++  id: string
++  numero: number
++  status: 'ABERTA' | 'FINALIZADA' | 'CANCELADA'
++  origem: 'PDV' | 'ECOMMERCE' | 'PDV_OFFLINE'
++  total_liquido_centavos: number
++  desconto_total_centavos: number
++  created_at: string
++  finalizada_em: string | null
++}
++
++export interface VendaResumoResponse {
++  data: VendaResumo[]
++  total: number
++  page: number
++  limit: number
++}
+diff --git a/docs/specs/feat-107-clientes-api-integration/existing-code.md b/docs/specs/feat-107-clientes-api-integration/existing-code.md
+new file mode 100644
+index 0000000..a9a817f
+--- /dev/null
++++ b/docs/specs/feat-107-clientes-api-integration/existing-code.md
+@@ -0,0 +1,330 @@
++# FEAT-107: Clientes API Integration — Existing Code Analysis
++
++## 1. BACKEND API RESPONSE FIELDS
++
++### Base Customer Response (GET /customers, GET /customers/:id)
++
++**All fields returned to clients (post-processing by `toResponse()`):**
++
++```typescript
++interface CustomerResponse extends Omit<Customer, 'cpf_cnpj_enc' | 'data_nascimento_enc' | 'cpf_cnpj_hash'> {
++  cpf_cnpj?: string | null;        // Only in /customers/:id/export (decrypted)
++  data_nascimento?: string | null;  // Only in /customers/:id/export (decrypted)
++}
++```
++
++**List Response (GET /customers):**
++```typescript
++interface CustomerResponsePage {
++  data: CustomerResponse[];
++  total: number;
++  page: number;
++  limit: number;
++}
++```
++
++**Actual safe-view fields returned (normal endpoints):**
++- `id` (UUID)
++- `unidade_id` (UUID)
++- `nome` (string, max 255 chars)
++- `telefone_principal` (string, max 20 chars)
++- `email` (string or null, max 255 chars)
++- `dados_dinamicos` (JSON object; encrypted values masked as `***`)
++- `consentimento_lgpd` (boolean)
++- `consentimento_versao` (string or null, max 20 chars)
++- `consentimento_em` (ISO datetime or null)
++- `ativo` (boolean, default true)
++- `created_at` (ISO datetime)
++- `updated_at` (ISO datetime)
++- `deleted_at` (ISO datetime or null)
++
++**NEVER returned to clients (stripped by toResponse):**
++- `cpf_cnpj_enc` (encrypted field)
++- `data_nascimento_enc` (encrypted field)
++- `cpf_cnpj_hash` (internal search hash)
++
++---
++
++## 2. QUERY/FILTER DTO — QueryCustomerDto
++
++**Frontend must send these query parameters to GET /customers:**
++
++```typescript
++interface QueryCustomerDto {
++  q?: string;              // Fuzzy search by name (pg_trgm similarity > 0.3 or ILIKE)
++  telefone?: string;       // Prefix search on phone
++  cpf_cnpj?: string;       // Exact search via hash (format: "123.456.789-09")
++  email?: string;          // Case-insensitive email search
++  ativo?: boolean;         // Filter by active status (default: undefined)
++  page?: number;           // Pagination page (default: 1, min: 1)
++  limit?: number;          // Items per page (default: 20, max: 100)
++}
++```
++
++---
++
++## 3. CURRENT FRONTEND FILTER STATE VARIABLES
++
++**File: `/apps/admin/src/pages/clientes/components/ClientesFilter.tsx`**
++
++```typescript
++export interface ClientesFiltros {
++  busca: string;            // Search by name/email/phone (local, not API)
++  uf: string;               // State filter ("all" or 2-letter code: "SP", "RJ", etc)
++  somenteAtivos: boolean;   // Local filter: show only ativo === true
++  comConsentimento: boolean; // Local filter: show only consentimentoLgpd === true
++}
++```
++
++**Initial state in ClientesPage.tsx:**
++```typescript
++const [filtros, setFiltros] = useState<ClientesFiltros>({
++  busca: '',
++  uf: 'all',
++  somenteAtivos: false,
++  comConsentimento: false,
++})
++```
++
++**State variables for pagination:**
++```typescript
++const [page, setPage] = useState(1)
++```
++
++---
++
++## 4. TABLE COLUMNS (ClientesTable.tsx)
++
++Currently displays these columns:
++
++1. **Cliente** — Avatar + nome + cpfCnpjMascarado (masked)
++2. **Contato** — email + telefonePrincipal (formatted via maskPhone)
++3. **Cidade/UF** — cidade + "/" + uf
++4. **Cadastro** — dataCadastro (formatted as DD/MM/YYYY)
++5. **Total gasto** — totalGastoCentavos (formatted as BRL currency, right-aligned)
++6. **Pedidos** — totalPedidos (count, right-aligned)
++7. **Status** — Badge: "Ativo" or "Inativo" + Shield icon (if consentimentoLgpd)
++8. **Action** — Eye icon (navigate to detail)
++
++---
++
++## 5. CLIENT DETALHE PAGE FIELDS (ClienteDetalhe.tsx)
++
++### KPI Cards Section
++- Total de pedidos (from detalhe.pedidos.length)
++- Total gasto (sum of finalized orders totalLiquidoCentavos, or falls back to mock)
++- Ticket médio (totalGasto / finalized orders count)
++- Último pedido (date of first order in list)
++
++### "Dados pessoais" Section (6 fields, 3-col grid)
++1. Nome completo — `base.nome`
++2. CPF/CNPJ — `base.cpfCnpjMascarado` (masked, never plaintext)
++3. Data de nascimento — `detalhe?.dataNascimento` (formatted as DD/MM/YYYY, shows `***` if missing)
++4. E-mail — `base.email`
++5. Telefone — `base.telefonePrincipal` (formatted via maskPhone)
++6. Cadastrado em — `base.dataCadastro` (formatted as DD/MM/YYYY)
++
++### "Endereços" Section (conditional)
++- Only shown if `detalhe?.enderecos` exists and length > 0
++- Fields per address:
++  - logradouro, numero, complemento, bairro
++  - cidade, uf, cep (formatted via maskCep)
++  - Badge "Principal" if principal === true
++
++### "Pedidos" Section
++- Table showing orders from `detalhe?.pedidos ?? []`
++- Columns: Nº (numero) | Data (criadoEm formatted) | Origem (mapped label) | Desconto (descontoTotalCentavos, right-aligned) | Total (totalLiquidoCentavos, formatted as BRL) | Status (badge with icon)
++
++---
++
++## 6. MOCK DATA STRUCTURE
++
++**File: `/apps/admin/src/data/clientes.mock.ts`**
++
++### ClienteMock Interface
++```typescript
++interface ClienteMock {
++  id: string;
++  nome: string;
++  email: string;
++  cpfCnpjMascarado: string;        // ⚠ camelCase! Mock-only field
++  telefonePrincipal: string;        // ⚠ camelCase!
++  cidade: string;                   // ⚠ NO backend equivalent at top level
++  uf: string;                       // ⚠ NO backend equivalent at top level
++  dataCadastro: string;             // ISO date string
++  totalGastoCentavos: number;       // ⚠ Computed from orders, NOT in API
++  totalPedidos: number;             // ⚠ Computed from orders count, NOT in API
++  ativo: boolean;
++  consentimentoLgpd: boolean;
++}
++```
++
++### ClienteDetalheMock Interface
++```typescript
++interface ClienteDetalheMock extends ClienteMock {
++  dataNascimento: string;           // ISO date string (masked in list view)
++  enderecos: {
++    id: string;
++    logradouro: string;
++    numero: string;
++    complemento?: string;
++    bairro: string;
++    cidade: string;
++    uf: string;
++    cep: string;
++    principal: boolean;
++  }[];
++  pedidos: PedidoClienteMock[];
++}
++```
++
++### PedidoClienteMock Interface
++```typescript
++interface PedidoClienteMock {
++  id: string;
++  numero: string;
++  status: 'ABERTA' | 'FINALIZADA' | 'CANCELADA';
++  origem: 'PDV' | 'ECOMMERCE' | 'WHATSAPP';
++  totalLiquidoCentavos: number;
++  descontoTotalCentavos: number;
++  criadoEm: string;                 // ISO datetime
++  finalizadaEm: string | null;
++}
++```
++
++---
++
++## 7. FIELDS TO REMOVE (NO BACKEND EQUIVALENT)
++
++These mock fields have **NO corresponding field in the API**:
++
++1. **`totalGastoCentavos`** — Must be computed client-side from related orders via Venda API
++2. **`totalPedidos`** — Must be computed client-side from vendas count
++3. **`cidade`** — NOT stored at customer level; comes from customer.address or shipping address
++4. **`uf`** — NOT stored at customer level; comes from customer.address or shipping address
++5. **`cpfCnpjMascarado`** — Mock helper; API never returns plaintext CPF/CNPJ (only decrypted in /export)
++
++---
++
++## 8. FIELDS TO RENAME (camelCase → snake_case)
++
++Mock uses **camelCase**, API uses **snake_case**. Must rename when integrating:
++
++| Mock (camelCase) | API (snake_case) | Notes |
++|---|---|---|
++| `telefonePrincipal` | `telefone_principal` | Direct 1:1 mapping |
++| `dataCadastro` | `created_at` | Frontend rename only |
++| `dataNascimento` | `data_nascimento` | In detail view only; masked in list |
++| `consentimentoLgpd` | `consentimento_lgpd` | Direct 1:1 mapping |
++| `cpfCnpjMascarado` | (n/a) | Frontend helper; never use plaintext from API |
++
++---
++
++## 9. BACKEND ROUTES & OPERATIONS
++
++### List Customers (Paginated)
++```http
++GET /customers?q=search&telefone=11&cpf_cnpj=123.456.789-09&email=test@mail.com&ativo=true&page=1&limit=20
++```
++**Returns:** `CustomerResponsePage` with paginated safe-view customers
++
++### Get Customer Detail
++```http
++GET /customers/:id
++```
++**Returns:** Single `CustomerResponse` (PII masked, no export)
++
++### Export Customer (Decrypted)
++```http
++GET /customers/:id/export
++```
++**Returns:** `CustomerResponse` with cpf_cnpj & data_nascimento **decrypted** (LGPD Art. 18, IV)
++
++### Create Customer
++```http
++POST /customers
++Body: CreateCustomerDto
++```
++**Requires:** consentimento_lgpd = true, validates CPF/CNPJ via digit check & encrypts
++
++### Update Customer
++```http
++PATCH /customers/:id
++Body: UpdateCustomerDto
++```
++**Logs:** changed_fields in audit
++
++### Delete Customer (Anonymize)
++```http
++DELETE /customers/:id
++```
++**Action:** Soft delete + anonymization (PII → "[ANONIMIZADO]"), not hard delete
++
++---
++
++## 10. CRITICAL INTEGRATION NOTES
++
++### Security & Privacy
++
++1. **CPF/CNPJ Encryption**: Backend encrypts all CPF/CNPJ with AES-256-GCM; frontend never sees plaintext except via `/export` (LGPD access right)
++2. **Dynamic Fields**: `dados_dinamicos` JSON may contain encrypted CPF_CNPJ subfields; frontend masks these as `***` in safe view
++3. **Audit Logging**: Every read/update/delete is logged with user ID + IP; LGPD compliant
++4. **Address Data**: NOT stored on Customer model directly; must come from separate Venda.endereco_entrega or customer_addresses table (not yet visible in schema excerpt)
++
++### Frontend Must Handle
++
++1. **Local vs API filtering**: Current filters (uf, somenteAtivos, comConsentimento) are **local** in-memory filters on mock data; must transition to server-side pagination + filtering via QueryCustomerDto
++2. **Computed fields**: totalGastoCentavos, totalPedidos, cidade, uf must be fetched from related Venda records, not stored on Customer
++3. **Masking**: CPF/CNPJ always masked in list view (show `***.***.***-**`); only decrypted on explicit export action
++4. **Date formatting**: Backend returns ISO 8601; frontend formats to `DD/MM/YYYY` for display
++5. **Phone formatting**: Backend stores raw digits; frontend applies maskPhone() utility
++
++### API Query Limitations
++
++- **`q` (name search)**: Uses PostgreSQL pg_trgm fuzzy matching (similarity > 0.3 or ILIKE); not exact match
++- **`telefone`**: Prefix search on raw digits (so "11" matches all SP numbers starting with 11)
++- **`cpf_cnpj`**: Hash-based exact search; frontend must format input first
++- **Pagination**: Max 100 items per page; defaults to 20
++
++---
++
++## 11. MOCK DATA SAMPLE
++
++Current mock has **12 customers** (IDs 1–12), with only customer ID "1" having detail data in `CLIENTE_DETALHE_MOCK`:
++
++```typescript
++{
++  id: '1',
++  nome: 'Ana Paula Ferreira',
++  email: 'anapaula@email.com',
++  cpfCnpjMascarado: '***.*23.456-**',
++  telefonePrincipal: '(11) 99123-4567',
++  cidade: 'São Paulo',
++  uf: 'SP',
++  dataCadastro: '2025-03-15',
++  totalGastoCentavos: 128950,
++  totalPedidos: 7,
++  ativo: true,
++  consentimentoLgpd: true,
++}
++```
++
++Detail data includes:
++- `dataNascimento: '1990-07-15'`
++- Array of addresses (1 item, marked principal)
++- Array of 7 orders with varying statuses & amounts
++
++---
++
++## MIGRATION CHECKLIST
++
++- [ ] Remove mock data dependency; call `GET /customers` endpoint
++- [ ] Remove local filtering logic; use QueryCustomerDto params for server-side filtering
++- [ ] Rename camelCase fields to snake_case from API response
++- [ ] Handle `totalGastoCentavos` & `totalPedidos` as computed/fetched from Venda API
++- [ ] Handle `cidade` & `uf` from separate address records (not top-level Customer fields)
++- [ ] Ensure CPF/CNPJ masking logic works with API response (never plaintext in list view)
++- [ ] Test pagination with limit + page params
++- [ ] Test export flow: GET /customers/:id/export for decrypted PII (LGPD compliance)
++- [ ] Remove cpfCnpjMascarado helper; implement on frontend from API data
++- [ ] Verify audit logging works (read/update/delete actions)

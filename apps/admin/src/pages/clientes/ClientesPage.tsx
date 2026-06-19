@@ -1,40 +1,45 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { ClientesFilter, type ClientesFiltros } from './components/ClientesFilter'
 import { ClientesTable } from './components/ClientesTable'
-import { CLIENTES_MOCK } from '@/data/clientes.mock'
+import { api } from '@/lib/api'
+import { type Cliente, type ClienteListResponse } from './types'
 
-const LIMIT = 10
-
-const UFS = [...new Set(CLIENTES_MOCK.map((c) => c.uf))].sort()
+const LIMIT = 20
 
 export function ClientesPage() {
+  const [clientes, setClientes] = useState<Cliente[]>([])
+  const [total, setTotal] = useState(0)
+  const [page, setPage] = useState(1)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(false)
   const [filtros, setFiltros] = useState<ClientesFiltros>({
     busca: '',
-    uf: 'all',
     somenteAtivos: false,
-    comConsentimento: false,
   })
-  const [page, setPage] = useState(1)
 
-  const clientesFiltrados = useMemo(() => {
-    const busca = filtros.busca.toLowerCase()
-    return CLIENTES_MOCK.filter((c) => {
-      if (
-        busca &&
-        !c.nome.toLowerCase().includes(busca) &&
-        !c.email.toLowerCase().includes(busca) &&
-        !c.telefonePrincipal.includes(busca)
-      )
-        return false
-      if (filtros.uf !== 'all' && c.uf !== filtros.uf) return false
-      if (filtros.somenteAtivos && !c.ativo) return false
-      if (filtros.comConsentimento && !c.consentimentoLgpd) return false
-      return true
-    })
-  }, [filtros])
+  const loadClientes = useCallback(async (signal?: AbortSignal) => {
+    setLoading(true)
+    setError(false)
+    try {
+      const params: Record<string, string | number | boolean> = { page, limit: LIMIT }
+      if (filtros.busca.trim()) params.q = filtros.busca.trim()
+      if (filtros.somenteAtivos) params.ativo = true
+      const r = await api.get<ClienteListResponse>('/customers', { params, signal })
+      setClientes(r.data.data)
+      setTotal(r.data.total)
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === 'CanceledError') return
+      setError(true)
+    } finally {
+      setLoading(false)
+    }
+  }, [page, filtros])
 
-  const total = clientesFiltrados.length
-  const paginados = clientesFiltrados.slice((page - 1) * LIMIT, page * LIMIT)
+  useEffect(() => {
+    const controller = new AbortController()
+    loadClientes(controller.signal)
+    return () => controller.abort()
+  }, [loadClientes])
 
   function handleFiltrosChange(novosFiltros: ClientesFiltros) {
     setFiltros(novosFiltros)
@@ -46,14 +51,26 @@ export function ClientesPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="font-display text-3xl font-bold text-foreground">Clientes</h1>
-          <p className="text-sm text-muted-foreground mt-1">{CLIENTES_MOCK.length} clientes cadastrados</p>
+          <p className="text-sm text-muted-foreground mt-1">
+            {total} cliente{total !== 1 ? 's' : ''} cadastrado{total !== 1 ? 's' : ''}
+          </p>
         </div>
       </div>
 
-      <ClientesFilter filtros={filtros} ufs={UFS} onChange={handleFiltrosChange} />
+      <ClientesFilter filtros={filtros} onChange={handleFiltrosChange} />
+
+      {error && (
+        <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          Não foi possível carregar os clientes.{' '}
+          <button className="underline font-medium" onClick={() => loadClientes()}>
+            Tentar novamente
+          </button>
+        </div>
+      )}
 
       <ClientesTable
-        clientes={paginados}
+        clientes={clientes}
+        loading={loading}
         page={page}
         limit={LIMIT}
         total={total}
