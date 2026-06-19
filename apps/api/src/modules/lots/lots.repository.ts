@@ -6,10 +6,20 @@ export type LotRecord = Lot;
 
 export type LotWithProduct = Lot & {
   product: { id: string; name: string; sku: string | null };
+  invoice_item: {
+    id: string;
+    nf_entrada: { id: string; numero: string; serie: string | null };
+  } | null;
 };
 
 const PRODUCT_SELECT = {
   product: { select: { id: true, name: true, sku: true } },
+  invoice_item: {
+    select: {
+      id: true,
+      nf_entrada: { select: { id: true, numero: true, serie: true } },
+    },
+  },
 } as const;
 
 @Injectable()
@@ -56,7 +66,7 @@ export class LotsRepository {
         include: PRODUCT_SELECT,
         skip,
         take: pagination.limit,
-        orderBy: [{ created_at: 'desc' }],
+        orderBy: [{ expires_at: { sort: 'asc', nulls: 'last' } }, { created_at: 'asc' }],
       }),
       this.prisma.lot.count({ where }),
     ]);
