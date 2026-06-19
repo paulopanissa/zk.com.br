@@ -4,11 +4,13 @@ import { FileUpload } from '@ark-ui/react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+  Sheet,
+  SheetBody,
+  SheetContent,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { api } from '@/lib/api'
@@ -258,13 +260,13 @@ export function MarcasPage() {
         </div>
       )}
 
-      {/* Brand create/edit modal */}
-      <Dialog open={modal !== null} onOpenChange={(open) => { if (!open) setModal(null) }}>
-        <DialogContent className="sm:max-w-sm" onInteractOutside={(e) => e.preventDefault()}>
-          <DialogHeader>
-            <DialogTitle>{modal?.mode === 'create' ? 'Nova marca' : 'Editar marca'}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 pt-2">
+      {/* Brand create/edit sheet */}
+      <Sheet open={modal !== null} onOpenChange={(open) => { if (!open) setModal(null) }}>
+        <SheetContent>
+          <SheetHeader>
+            <SheetTitle>{modal?.mode === 'create' ? 'Nova marca' : 'Editar marca'}</SheetTitle>
+          </SheetHeader>
+          <SheetBody className="space-y-5">
             {/* Nome */}
             <div className="space-y-1.5">
               <label htmlFor="brand-name" className="text-sm font-medium text-foreground">Nome *</label>
@@ -364,16 +366,15 @@ export function MarcasPage() {
             {formError && (
               <p className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">{formError}</p>
             )}
-
-            <div className="flex justify-end gap-3 pt-2">
-              <Button variant="outline" onClick={() => setModal(null)}>Cancelar</Button>
-              <Button onClick={handleSave} disabled={saving}>
-                {saving ? 'Salvando…' : 'Salvar'}
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+          </SheetBody>
+          <SheetFooter>
+            <Button variant="outline" onClick={() => setModal(null)}>Cancelar</Button>
+            <Button onClick={handleSave} disabled={saving}>
+              {saving ? 'Salvando…' : 'Salvar'}
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
 
     </div>
   )

@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+  Sheet,
+  SheetBody,
+  SheetContent,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet'
 import { Input } from '@/components/ui/input'
 import { DatePicker } from '@/components/ui/date-picker'
 import { NumberInput } from '@/components/ui/number-input'
@@ -81,113 +83,116 @@ export function NovoCupomModal({ open, onClose, onCreate }: NovoCupomModalProps)
   }
 
   return (
-    <Dialog open={open} onOpenChange={(v) => !v && handleClose()}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle className="font-display text-lg">Novo cupom</DialogTitle>
-        </DialogHeader>
+    <Sheet open={open} onOpenChange={(v) => !v && handleClose()}>
+      <SheetContent>
+        <SheetHeader>
+          <SheetTitle className="font-display">Novo cupom</SheetTitle>
+        </SheetHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4 pt-2">
-          {/* Código */}
-          <Field label="Código *" error={errors.code}>
-            <Input
-              placeholder="EX: BEMVINDO10"
-              value={form.code}
-              onChange={(e) => set('code', e.target.value)}
-              className="font-mono uppercase"
-            />
-          </Field>
-
-          {/* Tipo */}
-          <Field label="Tipo *" error={errors.type}>
-            <Select value={form.type} onValueChange={(v) => set('type', v)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Selecione o tipo" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="PERCENTUAL">Percentual (%)</SelectItem>
-                <SelectItem value="FIXO">Valor fixo (R$)</SelectItem>
-                <SelectItem value="FRETE_GRATIS">Frete grátis</SelectItem>
-              </SelectContent>
-            </Select>
-          </Field>
-
-          {/* Desconto condicional */}
-          {form.type === 'PERCENTUAL' && (
-            <Field label="Percentual * (ex: 10 = 10%)" error={errors.percentBps}>
+        <form id="novo-cupom-form" onSubmit={handleSubmit}>
+          <SheetBody className="space-y-5">
+            {/* Código */}
+            <Field label="Código *" error={errors.code}>
               <Input
-                type="number"
-                min={1}
-                max={100}
-                placeholder="10"
-                value={form.percentBps}
-                onChange={(e) => set('percentBps', e.target.value)}
+                placeholder="EX: BEMVINDO10"
+                value={form.code}
+                onChange={(e) => set('code', e.target.value)}
+                className="font-mono uppercase"
+                autoFocus
               />
             </Field>
-          )}
-          {form.type === 'FIXO' && (
-            <Field label="Valor em R$ * (ex: 10.00)" error={errors.valueCentavos}>
+
+            {/* Tipo */}
+            <Field label="Tipo *" error={errors.type}>
+              <Select value={form.type} onValueChange={(v) => set('type', v)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione o tipo" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="PERCENTUAL">Percentual (%)</SelectItem>
+                  <SelectItem value="FIXO">Valor fixo (R$)</SelectItem>
+                  <SelectItem value="FRETE_GRATIS">Frete grátis</SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
+
+            {/* Desconto condicional */}
+            {form.type === 'PERCENTUAL' && (
+              <Field label="Percentual * (ex: 10 = 10%)" error={errors.percentBps}>
+                <Input
+                  type="number"
+                  min={1}
+                  max={100}
+                  placeholder="10"
+                  value={form.percentBps}
+                  onChange={(e) => set('percentBps', e.target.value)}
+                />
+              </Field>
+            )}
+            {form.type === 'FIXO' && (
+              <Field label="Valor em R$ * (ex: 10.00)" error={errors.valueCentavos}>
+                <Input
+                  type="number"
+                  min={0.01}
+                  step={0.01}
+                  placeholder="10.00"
+                  value={form.valueCentavos}
+                  onChange={(e) => set('valueCentavos', e.target.value)}
+                />
+              </Field>
+            )}
+
+            {/* Uso máximo */}
+            <Field label="Uso máximo (0 = ilimitado)">
+              <NumberInput
+                value={form.maxUses || '0'}
+                min={0}
+                placeholder="0"
+                onValueChange={(v) => set('maxUses', isNaN(v) ? '0' : String(v))}
+              />
+            </Field>
+
+            {/* Validade */}
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Válido de">
+                <DatePicker
+                  id="dp-valid-from"
+                  value={form.validFrom || undefined}
+                  placeholder="dd/mm/aaaa"
+                  onValueChange={(v) => set('validFrom', v ?? '')}
+                />
+              </Field>
+              <Field label="Válido até">
+                <DatePicker
+                  id="dp-valid-until"
+                  value={form.validUntil || undefined}
+                  placeholder="dd/mm/aaaa"
+                  onValueChange={(v) => set('validUntil', v ?? '')}
+                />
+              </Field>
+            </div>
+
+            {/* Descrição */}
+            <Field label="Descrição">
               <Input
-                type="number"
-                min={0.01}
-                step={0.01}
-                placeholder="10.00"
-                value={form.valueCentavos}
-                onChange={(e) => set('valueCentavos', e.target.value)}
+                placeholder="Descrição interna"
+                value={form.description}
+                onChange={(e) => set('description', e.target.value)}
               />
             </Field>
-          )}
-
-          {/* Uso máximo */}
-          <Field label="Uso máximo (0 = ilimitado)">
-            <NumberInput
-              value={form.maxUses || '0'}
-              min={0}
-              placeholder="0"
-              onValueChange={(v) => set('maxUses', isNaN(v) ? '0' : String(v))}
-            />
-          </Field>
-
-          {/* Validade */}
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Válido de">
-              <DatePicker
-                id="dp-valid-from"
-                value={form.validFrom || undefined}
-                placeholder="dd/mm/aaaa"
-                onValueChange={(v) => set('validFrom', v ?? '')}
-              />
-            </Field>
-            <Field label="Válido até">
-              <DatePicker
-                id="dp-valid-until"
-                value={form.validUntil || undefined}
-                placeholder="dd/mm/aaaa"
-                onValueChange={(v) => set('validUntil', v ?? '')}
-              />
-            </Field>
-          </div>
-
-          {/* Descrição */}
-          <Field label="Descrição">
-            <Input
-              placeholder="Descrição interna"
-              value={form.description}
-              onChange={(e) => set('description', e.target.value)}
-            />
-          </Field>
-
-          <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" onClick={handleClose}>
-              Cancelar
-            </Button>
-            <Button type="submit" className="bg-primary text-primary-foreground hover:bg-primary/90">
-              Criar cupom
-            </Button>
-          </div>
+          </SheetBody>
         </form>
-      </DialogContent>
-    </Dialog>
+
+        <SheetFooter>
+          <Button type="button" variant="outline" onClick={handleClose}>
+            Cancelar
+          </Button>
+          <Button type="submit" form="novo-cupom-form">
+            Criar cupom
+          </Button>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
   )
 }
 
