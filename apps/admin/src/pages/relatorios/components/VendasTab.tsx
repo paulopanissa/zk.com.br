@@ -61,7 +61,12 @@ export function VendasTab() {
     setLoading(true)
     setError(null)
     api
-      .get<VendasData>('/relatorios/vendas', { params: { data_inicio: inicio, data_fim: fim } })
+      .get<VendasData>('/relatorios/vendas', {
+        params: {
+          data_inicio: `${inicio}T00:00:00.000Z`,
+          data_fim: `${fim}T23:59:59.999Z`,
+        },
+      })
       .then((r) => setData(r.data))
       .catch(() => setError('Não foi possível carregar o relatório de vendas.'))
       .finally(() => setLoading(false))

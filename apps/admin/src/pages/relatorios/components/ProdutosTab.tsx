@@ -130,7 +130,11 @@ export function ProdutosTab() {
     setError(null)
     api
       .get<ProdutosData>('/relatorios/produtos', {
-        params: { data_inicio: inicio, data_fim: fim, ordem },
+        params: {
+          data_inicio: `${inicio}T00:00:00.000Z`,
+          data_fim: `${fim}T23:59:59.999Z`,
+          ordem,
+        },
       })
       .then((r) => setData(r.data))
       .catch(() => setError('Não foi possível carregar o relatório de produtos.'))

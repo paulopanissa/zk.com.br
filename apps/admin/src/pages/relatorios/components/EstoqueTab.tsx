@@ -91,7 +91,7 @@ export function EstoqueTab() {
           />
           <span className="text-sm text-muted-foreground">dias</span>
         </div>
-        <Button variant="outline" size="sm" onClick={() => { setPage(1); load() }} disabled={loading}>
+        <Button variant="outline" size="sm" onClick={() => setPage(1)} disabled={loading}>
           Aplicar
         </Button>
       </div>
