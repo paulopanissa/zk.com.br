@@ -940,10 +940,10 @@ export function FornecedorDetalhe() {
                       if (r) {
                         setAddressForm((p) => ({
                           ...p,
-                          logradouro: p.logradouro || r.logradouro,
-                          bairro: p.bairro || r.bairro,
-                          cidade: p.cidade || r.localidade,
-                          estado: p.estado || r.uf,
+                          logradouro: r.logradouro,
+                          bairro: r.bairro,
+                          cidade: r.localidade,
+                          estado: r.uf,
                         }))
                         fornNumeroRef.current?.focus()
                       }

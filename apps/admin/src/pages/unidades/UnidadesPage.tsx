@@ -484,10 +484,10 @@ export function UnidadesPage() {
                         if (r) {
                           setForm((f) => ({
                             ...f,
-                            logradouro: f.logradouro || r.logradouro,
-                            bairro: f.bairro || r.bairro,
-                            municipio: f.municipio || r.localidade,
-                            uf: f.uf || r.uf,
+                            logradouro: r.logradouro,
+                            bairro: r.bairro,
+                            municipio: r.localidade,
+                            uf: r.uf,
                           }))
                           unitNumeroRef.current?.focus()
                         }
