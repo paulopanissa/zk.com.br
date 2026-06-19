@@ -115,18 +115,21 @@ export function LotesPage() {
   // Fetch urgency counts once on mount
   useEffect(() => {
     const today = new Date().toISOString().slice(0, 10)
+    const tomorrow = new Date()
+    tomorrow.setDate(tomorrow.getDate() + 1)
+    const tomorrowStr = tomorrow.toISOString().slice(0, 10)
     const in30Days = new Date()
     in30Days.setDate(in30Days.getDate() + 30)
     const in30DaysStr = in30Days.toISOString().slice(0, 10)
 
     api
-      .get<LotesPageResponse>('/lots', { params: { limit: 1, expires_before: today } })
+      .get<LotesPageResponse>('/lots', { params: { limit: 1, active: true, expires_before: today } })
       .then((r) => setVencidosTotal(r.data.total))
       .catch(() => {/* non-critical */})
 
     api
       .get<LotesPageResponse>('/lots', {
-        params: { limit: 1, expires_after: today, expires_before: in30DaysStr },
+        params: { limit: 1, active: true, expires_after: tomorrowStr, expires_before: in30DaysStr },
       })
       .then((r) => setVencendoTotal(r.data.total))
       .catch(() => {/* non-critical */})
@@ -207,7 +210,7 @@ export function LotesPage() {
             {vencidosTotal > 0 && vencendoTotal > 0 && <span className="text-muted-foreground"> e </span>}
             {vencendoTotal > 0 && (
               <span className="font-semibold text-warning">
-                {vencendoTotal} {vencendoTotal === 1 ? 'vencendo em 30 dias' : 'vencendo em 30 dias'}
+                {vencendoTotal} {vencendoTotal === 1 ? 'lote vencendo em 30 dias' : 'lotes vencendo em 30 dias'}
               </span>
             )}
             <span className="text-muted-foreground"> no estoque — revise e descarte se necessário.</span>
