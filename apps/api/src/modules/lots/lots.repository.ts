@@ -4,6 +4,14 @@ import { PrismaService } from '../../prisma/prisma.service';
 
 export type LotRecord = Lot;
 
+export type LotWithProduct = Lot & {
+  product: { id: string; name: string; sku: string | null };
+};
+
+const PRODUCT_SELECT = {
+  product: { select: { id: true, name: true, sku: true } },
+} as const;
+
 @Injectable()
 export class LotsRepository {
   constructor(private readonly prisma: PrismaService) {}
@@ -45,6 +53,7 @@ export class LotsRepository {
     const [data, total] = await this.prisma.$transaction([
       this.prisma.lot.findMany({
         where,
+        include: PRODUCT_SELECT,
         skip,
         take: pagination.limit,
         orderBy: [{ created_at: 'desc' }],
@@ -81,6 +90,7 @@ export class LotsRepository {
       // FIFO: expires_at ASC (nulls last via Prisma nulls), then created_at ASC
       this.prisma.lot.findMany({
         where,
+        include: PRODUCT_SELECT,
         skip,
         take: pagination.limit,
         orderBy: [{ expires_at: { sort: 'asc', nulls: 'last' } }, { created_at: 'asc' }],
@@ -99,11 +109,13 @@ export class LotsRepository {
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() + days);
 
+    const now = new Date();
     const where: Prisma.LotWhereInput = {
       unidade_id: unitId,
       active: true,
       expires_at: {
         not: null,
+        gte: now,
         lte: cutoff,
       },
     };
@@ -113,6 +125,7 @@ export class LotsRepository {
     const [data, total] = await this.prisma.$transaction([
       this.prisma.lot.findMany({
         where,
+        include: PRODUCT_SELECT,
         skip,
         take: pagination.limit,
         orderBy: [{ expires_at: 'asc' }],
