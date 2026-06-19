@@ -28,6 +28,9 @@ export interface Product {
   name: string
   sku: string | null
   barcode: string | null
+  unit: string | null
+  description: string | null
+  short_description: string | null
   active: boolean
   featured: boolean
   min_stock: number

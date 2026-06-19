@@ -1,4 +1,5 @@
 import { Edit2, MoreHorizontal, PowerOff, Package, Star } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -24,6 +25,7 @@ interface ProdutosTableProps {
 }
 
 export function ProdutosTable({ produtos, loading, page, limit, total, onPageChange }: ProdutosTableProps) {
+  const navigate = useNavigate()
   const totalPages = Math.ceil(total / limit)
 
   if (loading && produtos.length === 0) {
@@ -176,6 +178,7 @@ export function ProdutosTable({ produtos, loading, page, limit, total, onPageCha
                         size="icon"
                         className="h-8 w-8 text-muted-foreground hover:text-foreground"
                         title="Editar"
+                        onClick={() => navigate(`/produtos/${p.id}/editar`)}
                       >
                         <Edit2 className="h-3.5 w-3.5" />
                       </Button>
