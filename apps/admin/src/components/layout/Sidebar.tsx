@@ -44,7 +44,6 @@ const navItems: NavItem[] = [
   { icon: ShoppingBag, label: 'Pedidos', href: '/pedidos', group: 'Comercial' },
   { icon: Percent, label: 'Cupons', href: '/cupons', group: 'Comercial' },
   { icon: BarChart3, label: 'Relatórios', href: '/relatorios', group: 'Análise' },
-  { icon: Building2, label: 'Unidades', href: '/unidades', group: 'Sistema' },
   { icon: Bell, label: 'Notificações', href: '/notificacoes', group: 'Sistema' },
   { icon: Key, label: 'API Keys de IA', href: '/ai-keys', group: 'Sistema' },
   { icon: Shield, label: 'LGPD', href: '/lgpd', group: 'Sistema' },
@@ -98,7 +97,7 @@ export function Sidebar({ currentPath = '/' }: SidebarProps) {
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 overflow-y-auto py-3 px-2">
+      <nav className="flex-1 overflow-y-auto py-3 px-2 scrollbar-sidebar">
         {Object.entries(groups).map(([group, items]) => (
           <div key={group} className="mb-4">
             {!collapsed && (

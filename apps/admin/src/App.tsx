@@ -20,7 +20,6 @@ import { FornecedorDetalhe } from '@/pages/fornecedores/FornecedorDetalhe'
 import { NotasEntradaPage } from '@/pages/notas-entrada/NotasEntradaPage'
 import { NotaEntradaDetalhe } from '@/pages/notas-entrada/NotaEntradaDetalhe'
 import { LotesPage } from '@/pages/lotes/LotesPage'
-import { UnidadesPage } from '@/pages/unidades/UnidadesPage'
 
 function AppRoutes() {
   return (
@@ -49,7 +48,6 @@ function AppRoutes() {
                 <Route path="/notas-entrada" element={<NotasEntradaPage />} />
                 <Route path="/notas-entrada/:id" element={<NotaEntradaDetalhe />} />
                 <Route path="/lotes" element={<LotesPage />} />
-                <Route path="/unidades" element={<UnidadesPage />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </AdminShell>
