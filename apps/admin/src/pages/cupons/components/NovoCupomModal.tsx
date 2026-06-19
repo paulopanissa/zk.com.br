@@ -6,6 +6,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import { DatePicker } from '@/components/ui/date-picker'
+import { NumberInput } from '@/components/ui/number-input'
 import {
   Select,
   SelectContent,
@@ -138,22 +140,31 @@ export function NovoCupomModal({ open, onClose, onCreate }: NovoCupomModalProps)
 
           {/* Uso máximo */}
           <Field label="Uso máximo (0 = ilimitado)">
-            <Input
-              type="number"
+            <NumberInput
+              value={form.maxUses || '0'}
               min={0}
               placeholder="0"
-              value={form.maxUses}
-              onChange={(e) => set('maxUses', e.target.value)}
+              onValueChange={(v) => set('maxUses', isNaN(v) ? '0' : String(v))}
             />
           </Field>
 
           {/* Validade */}
           <div className="grid grid-cols-2 gap-3">
             <Field label="Válido de">
-              <Input type="date" value={form.validFrom} onChange={(e) => set('validFrom', e.target.value)} />
+              <DatePicker
+                id="dp-valid-from"
+                value={form.validFrom || undefined}
+                placeholder="dd/mm/aaaa"
+                onValueChange={(v) => set('validFrom', v ?? '')}
+              />
             </Field>
             <Field label="Válido até">
-              <Input type="date" value={form.validUntil} onChange={(e) => set('validUntil', e.target.value)} />
+              <DatePicker
+                id="dp-valid-until"
+                value={form.validUntil || undefined}
+                placeholder="dd/mm/aaaa"
+                onValueChange={(v) => set('validUntil', v ?? '')}
+              />
             </Field>
           </div>
 

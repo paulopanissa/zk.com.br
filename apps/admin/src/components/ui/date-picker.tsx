@@ -1,8 +1,10 @@
+import { useState } from 'react'
 import { DatePicker as ArkDatePicker, parseDate, Portal } from '@ark-ui/react'
 import { Calendar, ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface DatePickerProps {
+  id?: string
   value?: string
   placeholder?: string
   className?: string
@@ -10,7 +12,37 @@ interface DatePickerProps {
   onValueChange?: (value: string | undefined) => void
 }
 
+function applyDateMask(e: React.FormEvent<HTMLInputElement>) {
+  const el = e.currentTarget
+  const cursorPos = el.selectionStart ?? el.value.length
+  const digitsBeforeCursor = el.value.slice(0, cursorPos).replace(/\D/g, '').length
+
+  const digits = el.value.replace(/\D/g, '').slice(0, 8)
+  let masked = digits.slice(0, 2)
+  if (digits.length > 2) masked += '/' + digits.slice(2, 4)
+  if (digits.length > 4) masked += '/' + digits.slice(4, 8)
+
+  if (el.value === masked) return
+
+  el.value = masked
+
+  let digitCount = 0
+  let newPos = masked.length
+  for (let i = 0; i < masked.length; i++) {
+    if (masked[i] !== '/') digitCount++
+    if (digitCount === digitsBeforeCursor) { newPos = i + 1; break }
+  }
+  el.setSelectionRange(newPos, newPos)
+}
+
+function blockNonDigit(e: React.KeyboardEvent<HTMLInputElement>) {
+  if (e.ctrlKey || e.metaKey) return
+  const allowed = ['Backspace', 'Delete', 'Tab', 'Escape', 'Enter', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End']
+  if (!allowed.includes(e.key) && !/^\d$/.test(e.key)) e.preventDefault()
+}
+
 export function DatePicker({
+  id,
   value,
   placeholder = 'Selecione uma data',
   className,
@@ -18,27 +50,36 @@ export function DatePicker({
   onValueChange,
 }: DatePickerProps) {
   const parsedValue = value ? [parseDate(value)] : undefined
+  const [open, setOpen] = useState(false)
 
   return (
     <ArkDatePicker.Root
+      id={id}
+      locale="pt-BR"
       value={parsedValue}
       disabled={disabled}
+      open={open}
+      onOpenChange={({ open: o }) => setOpen(o)}
+      positioning={{ strategy: 'fixed' }}
       onValueChange={(details) => {
-        const v = details.valueAsString[0]
+        const v = details.value[0]?.toString()
         onValueChange?.(v)
       }}
     >
-      <ArkDatePicker.Control className={cn('flex items-center rounded-md border border-input bg-background', className)}>
+      <ArkDatePicker.Control className={cn('flex items-center overflow-hidden rounded-md border border-input bg-background', className)}>
         <ArkDatePicker.Input
           placeholder={placeholder}
+          onClick={() => setOpen(true)}
+          onInput={applyDateMask}
+          onKeyDown={blockNonDigit}
           className="h-9 flex-1 bg-transparent px-3 text-sm focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
         />
-        <ArkDatePicker.Trigger className="flex h-9 w-9 shrink-0 items-center justify-center border-l border-input text-muted-foreground hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-50">
+        <ArkDatePicker.Trigger className="flex h-9 w-9 shrink-0 items-center justify-center rounded-r-md border-l border-input text-muted-foreground hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-50">
           <Calendar className="h-4 w-4" />
         </ArkDatePicker.Trigger>
       </ArkDatePicker.Control>
       <Portal>
-        <ArkDatePicker.Positioner className="z-50">
+        <ArkDatePicker.Positioner style={{ zIndex: 9999 }}>
           <ArkDatePicker.Content className="rounded-lg border border-border bg-popover p-3 shadow-md">
             <ArkDatePicker.View view="day">
               <ArkDatePicker.Context>
