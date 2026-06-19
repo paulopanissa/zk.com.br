@@ -11,8 +11,7 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
 export interface ProdutosFiltros {
-  buscaNome: string
-  buscaSku: string    // SKU or barcode — heuristic routing
+  busca: string       // nome, SKU or barcode — heuristic routing on send
   categoria: string   // category_id or 'all'
   marca: string       // brand_id or 'all'
   somenteAtivos: boolean
@@ -38,8 +37,7 @@ export function ProdutosFilter({
   onChange,
 }: ProdutosFilterProps) {
   const temFiltro =
-    filtros.buscaNome ||
-    filtros.buscaSku ||
+    filtros.busca ||
     filtros.categoria !== 'all' ||
     filtros.marca !== 'all' ||
     filtros.somenteAtivos ||
@@ -50,30 +48,19 @@ export function ProdutosFilter({
   }
 
   function limpar() {
-    onChange({ buscaNome: '', buscaSku: '', categoria: 'all', marca: 'all', somenteAtivos: false, destaque: false })
+    onChange({ busca: '', categoria: 'all', marca: 'all', somenteAtivos: false, destaque: false })
   }
 
   return (
     <div className="rounded-lg border border-border bg-card p-4 shadow-sm">
       <div className="flex flex-wrap items-center gap-3">
-        {/* Busca por nome */}
-        <div className="relative min-w-[200px] flex-1">
+        {/* Busca unificada */}
+        <div className="relative min-w-[240px] flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Nome do produto"
-            value={filtros.buscaNome}
-            onChange={(e) => set('buscaNome', e.target.value)}
-            className="pl-9"
-          />
-        </div>
-
-        {/* Busca por SKU / código de barras */}
-        <div className="relative min-w-[160px]">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="SKU ou código de barras"
-            value={filtros.buscaSku}
-            onChange={(e) => set('buscaSku', e.target.value)}
+            placeholder="Nome, SKU ou código de barras"
+            value={filtros.busca}
+            onChange={(e) => set('busca', e.target.value)}
             className="pl-9"
           />
         </div>
