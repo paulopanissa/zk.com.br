@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Building2, Edit2, MapPin, Phone, Mail, Globe, Plus, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -175,6 +175,7 @@ export function EmpresaPage() {
   const [addrSaving, setAddrSaving] = useState(false)
   const [addrError, setAddrError] = useState<string | null>(null)
   const { lookup: cepLookup, loading: cepLoading, notFound: cepNotFound } = useCepLookup()
+  const addrNumeroRef = useRef<HTMLInputElement>(null)
 
   // Sheet: Telefone
   const [phoneOpen, setPhoneOpen] = useState(false)
@@ -300,7 +301,7 @@ export function EmpresaPage() {
         tipo: addrForm.tipo,
         logradouro: addrForm.logradouro.trim(),
         numero: addrForm.numero.trim(),
-        complemento: addrForm.complemento.trim() || undefined,
+        complemento: addrForm.complemento.trim() || null,
         bairro: addrForm.bairro.trim(),
         municipio: addrForm.municipio.trim(),
         uf: addrForm.uf.trim().toUpperCase(),
@@ -738,13 +739,16 @@ export function EmpresaPage() {
                     setAddrForm((f) => ({ ...f, cep: d }))
                     if (d.length === 8) {
                       const r = await cepLookup(d)
-                      if (r) setAddrForm((f) => ({
-                        ...f,
-                        logradouro: f.logradouro || r.logradouro,
-                        bairro: f.bairro || r.bairro,
-                        municipio: f.municipio || r.localidade,
-                        uf: f.uf || r.uf,
-                      }))
+                      if (r) {
+                        setAddrForm((f) => ({
+                          ...f,
+                          logradouro: f.logradouro || r.logradouro,
+                          bairro: f.bairro || r.bairro,
+                          municipio: f.municipio || r.localidade,
+                          uf: f.uf || r.uf,
+                        }))
+                        addrNumeroRef.current?.focus()
+                      }
                     }
                   }} />
               </div>
@@ -762,7 +766,7 @@ export function EmpresaPage() {
             <div className="grid grid-cols-3 gap-3">
               <div className="space-y-1.5">
                 <label htmlFor="addr-numero" className="text-sm font-medium text-foreground">Número *</label>
-                <Input id="addr-numero" value={addrForm.numero} placeholder="123"
+                <Input ref={addrNumeroRef} id="addr-numero" value={addrForm.numero} placeholder="123"
                   onChange={(e) => setAddrForm((f) => ({ ...f, numero: e.target.value }))} />
               </div>
               <div className="col-span-2 space-y-1.5">

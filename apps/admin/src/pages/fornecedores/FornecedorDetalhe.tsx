@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   ArrowLeft,
@@ -334,6 +334,7 @@ export function FornecedorDetalhe() {
   const [addressSaving, setAddressSaving] = useState(false)
   const [addressError, setAddressError] = useState<string | null>(null)
   const { lookup: cepLookup, loading: cepLoading, notFound: cepNotFound } = useCepLookup()
+  const fornNumeroRef = useRef<HTMLInputElement>(null)
 
   function load() {
     if (!id) return
@@ -483,7 +484,7 @@ export function FornecedorDetalhe() {
       cidade: addressForm.cidade.trim(),
       estado: addressForm.estado.toUpperCase(),
     }
-    if (addressForm.complemento.trim()) body.complemento = addressForm.complemento.trim()
+    body.complemento = addressForm.complemento.trim() || null
     try {
       if (addressModal?.mode === 'create') {
         await api.post(`/suppliers/${id}/addresses`, body)
@@ -906,6 +907,7 @@ export function FornecedorDetalhe() {
               <div className="space-y-1.5">
                 <label className="text-sm font-medium text-foreground">Número *</label>
                 <Input
+                  ref={fornNumeroRef}
                   value={addressForm.numero}
                   onChange={(e) => setAddressForm((p) => ({ ...p, numero: e.target.value }))}
                   placeholder="1234"
@@ -935,13 +937,16 @@ export function FornecedorDetalhe() {
                     setAddressForm((p) => ({ ...p, cep: d }))
                     if (d.length === 8) {
                       const r = await cepLookup(d)
-                      if (r) setAddressForm((p) => ({
-                        ...p,
-                        logradouro: p.logradouro || r.logradouro,
-                        bairro: p.bairro || r.bairro,
-                        cidade: p.cidade || r.localidade,
-                        estado: p.estado || r.uf,
-                      }))
+                      if (r) {
+                        setAddressForm((p) => ({
+                          ...p,
+                          logradouro: p.logradouro || r.logradouro,
+                          bairro: p.bairro || r.bairro,
+                          cidade: p.cidade || r.localidade,
+                          estado: p.estado || r.uf,
+                        }))
+                        fornNumeroRef.current?.focus()
+                      }
                     }
                   }}
                 />

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Building2, Edit2, Plus, PowerOff } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -112,6 +112,7 @@ export function UnidadesPage() {
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   const { lookup: cepLookup, loading: cepLoading, notFound: cepNotFound } = useCepLookup()
+  const unitNumeroRef = useRef<HTMLInputElement>(null)
 
   const load = useCallback(() => {
     setLoading(true)
@@ -195,7 +196,7 @@ export function UnidadesPage() {
         await api.put(`/units/${unitId}/address`, {
           logradouro: form.logradouro.trim(),
           numero: form.numero.trim(),
-          complemento: form.complemento.trim() || undefined,
+          complemento: form.complemento.trim() || null,
           bairro: form.bairro.trim(),
           municipio: form.municipio.trim(),
           uf: form.uf.trim().toUpperCase(),
@@ -480,13 +481,16 @@ export function UnidadesPage() {
                       patch({ cep: d })
                       if (d.length === 8) {
                         const r = await cepLookup(d)
-                        if (r) setForm((f) => ({
-                          ...f,
-                          logradouro: f.logradouro || r.logradouro,
-                          bairro: f.bairro || r.bairro,
-                          municipio: f.municipio || r.localidade,
-                          uf: f.uf || r.uf,
-                        }))
+                        if (r) {
+                          setForm((f) => ({
+                            ...f,
+                            logradouro: f.logradouro || r.logradouro,
+                            bairro: f.bairro || r.bairro,
+                            municipio: f.municipio || r.localidade,
+                            uf: f.uf || r.uf,
+                          }))
+                          unitNumeroRef.current?.focus()
+                        }
                       }
                     }}
                   />
@@ -523,6 +527,7 @@ export function UnidadesPage() {
                     Número
                   </label>
                   <Input
+                    ref={unitNumeroRef}
                     id="unit-numero"
                     value={form.numero}
                     onChange={(e) => patch({ numero: e.target.value })}
