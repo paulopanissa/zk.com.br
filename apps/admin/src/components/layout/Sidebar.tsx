@@ -44,7 +44,7 @@ const navItems: NavItem[] = [
   { icon: ShoppingBag, label: 'Pedidos', href: '/pedidos', group: 'Comercial' },
   { icon: Percent, label: 'Cupons', href: '/cupons', group: 'Comercial' },
   { icon: BarChart3, label: 'Relatórios', href: '/relatorios', group: 'Análise' },
-  { icon: Bell, label: 'Notificações', href: '/notificacoes', group: 'Sistema' },
+  { icon: Bell, label: 'Alertas', href: '/alertas', group: 'Sistema' },
   { icon: Key, label: 'API Keys de IA', href: '/ai-keys', group: 'Sistema' },
   { icon: Shield, label: 'LGPD', href: '/lgpd', group: 'Sistema' },
   { icon: Building2, label: 'Empresa', href: '/empresa', group: 'Sistema' },
