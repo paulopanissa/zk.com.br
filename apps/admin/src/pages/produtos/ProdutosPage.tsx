@@ -53,7 +53,8 @@ export function ProdutosPage() {
       if (filtros.busca.trim()) {
         const q = filtros.busca.trim()
         if (/^\d{8,}$/.test(q)) params.barcode = q
-        else if (!q.includes(' ') && /^[A-Za-z0-9_-]{1,30}$/.test(q)) params.sku = q
+        // SKU only when mixed letters+digits (e.g. RC001, ABC-123) — pure letters = name
+        else if (/^[A-Za-z0-9_-]+$/.test(q) && /[A-Za-z]/.test(q) && /\d/.test(q)) params.sku = q
         else params.name = q
       }
       if (filtros.categoria !== 'all') params.category_id = filtros.categoria
