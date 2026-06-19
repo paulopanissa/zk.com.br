@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { X } from 'lucide-react'
 import {
   Select,
@@ -61,10 +61,6 @@ export function EstoquePage() {
 
   const [activeTab, setActiveTab] = useState<'resumo' | 'movimentacoes'>('resumo')
 
-  // Track which tabs have ever been loaded to avoid re-fetching on tab switch
-  const resumoLoaded = useRef(false)
-  const movLoaded = useRef(false)
-
   const loadEstoque = useCallback(async (signal?: AbortSignal) => {
     setEstoqueLoading(true)
     setEstoqueError(false)
@@ -74,7 +70,6 @@ export function EstoquePage() {
       const r = await api.get<StockSummaryResponse>('/stock', { params, signal })
       setEstoque(r.data.data)
       setEstoqueTotal(r.data.total)
-      resumoLoaded.current = true
     } catch (err: unknown) {
       if (err instanceof Error && err.name === 'CanceledError') return
       setEstoqueError(true)
@@ -92,7 +87,6 @@ export function EstoquePage() {
       const r = await api.get<MovementsResponse>('/stock/movements', { params, signal })
       setMovimentacoes(r.data.data)
       setMovTotal(r.data.total)
-      movLoaded.current = true
     } catch (err: unknown) {
       if (err instanceof Error && err.name === 'CanceledError') return
       setMovError(true)
@@ -131,8 +125,12 @@ export function EstoquePage() {
       <div>
         <h1 className="font-display text-3xl font-bold text-foreground">Estoque</h1>
         <div className="flex items-center gap-4 mt-1">
-          <p className="text-sm text-muted-foreground">{estoqueTotal} produto{estoqueTotal !== 1 ? 's' : ''} com movimentação</p>
-          {!estoqueLoading && lowStockCount > 0 && (
+          {estoqueError ? (
+            <p className="text-sm text-muted-foreground">— produtos com movimentação</p>
+          ) : (
+            <p className="text-sm text-muted-foreground">{estoqueTotal} produto{estoqueTotal !== 1 ? 's' : ''} com movimentação</p>
+          )}
+          {!estoqueLoading && !estoqueError && lowStockCount > 0 && (
             <span className="text-xs font-medium text-warning">{lowStockCount} abaixo do mínimo (nesta página)</span>
           )}
         </div>

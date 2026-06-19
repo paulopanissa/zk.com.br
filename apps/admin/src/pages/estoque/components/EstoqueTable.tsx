@@ -88,7 +88,7 @@ export function EstoqueTable({ items, loading, page, limit, total, onPageChange 
                 </td>
 
                 <td className="px-4 py-3 text-right tabular-nums font-semibold text-foreground">
-                  {item.total_balance.toLocaleString('pt-BR')}
+                  {Number(item.total_balance).toLocaleString('pt-BR')}
                 </td>
 
                 <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">
@@ -96,7 +96,7 @@ export function EstoqueTable({ items, loading, page, limit, total, onPageChange 
                 </td>
 
                 <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">
-                  {item.min_stock.toLocaleString('pt-BR')}
+                  {Number(item.min_stock).toLocaleString('pt-BR')}
                 </td>
 
                 <td className="px-4 py-3 text-center">
