@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   ArrowLeft,
@@ -32,6 +32,8 @@ import {
 } from '@/components/ui/sheet'
 import { cn } from '@/lib/utils'
 import { api } from '@/lib/api'
+import { maskCep, maskPhone } from '@/lib/formatters'
+import { useCepLookup } from '@/hooks/useCepLookup'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -157,12 +159,6 @@ function formatDocument(doc: string): string {
   return doc
 }
 
-function formatPhone(phone: string): string {
-  const d = phone.replace(/\D/g, '')
-  if (d.length === 11) return d.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3')
-  if (d.length === 10) return d.replace(/(\d{2})(\d{4})(\d{4})/, '($1) $2-$3')
-  return phone
-}
 
 function initials(name: string): string {
   return name
@@ -204,7 +200,7 @@ function ContactCard({
           {contact.phone && (
             <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <Phone className="h-3.5 w-3.5 shrink-0" />
-              {formatPhone(contact.phone)}
+              {maskPhone(contact.phone)}
             </span>
           )}
         </div>
@@ -257,7 +253,7 @@ function AddressCard({
           {address.bairro} · {address.cidade}/{address.estado}
         </p>
         <p className="mt-1 text-xs text-muted-foreground font-mono">
-          CEP {address.cep.replace(/(\d{5})(\d{3})/, '$1-$2')}
+          CEP {maskCep(address.cep)}
         </p>
       </div>
       <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
@@ -337,6 +333,8 @@ export function FornecedorDetalhe() {
   const [addressForm, setAddressForm] = useState<AddressForm>(buildAddressForm())
   const [addressSaving, setAddressSaving] = useState(false)
   const [addressError, setAddressError] = useState<string | null>(null)
+  const { lookup: cepLookup, loading: cepLoading, notFound: cepNotFound } = useCepLookup()
+  const fornNumeroRef = useRef<HTMLInputElement>(null)
 
   function load() {
     if (!id) return
@@ -486,7 +484,7 @@ export function FornecedorDetalhe() {
       cidade: addressForm.cidade.trim(),
       estado: addressForm.estado.toUpperCase(),
     }
-    if (addressForm.complemento.trim()) body.complemento = addressForm.complemento.trim()
+    body.complemento = addressForm.complemento.trim() || null
     try {
       if (addressModal?.mode === 'create') {
         await api.post(`/suppliers/${id}/addresses`, body)
@@ -604,7 +602,7 @@ export function FornecedorDetalhe() {
             {supplier.phone && (
               <span className="flex items-center gap-2 text-sm text-brand-cream/70">
                 <Phone className="h-4 w-4 shrink-0" />
-                {formatPhone(supplier.phone)}
+                {maskPhone(supplier.phone)}
               </span>
             )}
             {supplier.website && (
@@ -761,9 +759,10 @@ export function FornecedorDetalhe() {
                 <div className="space-y-1.5">
                   <label className="text-sm font-medium text-foreground">Telefone</label>
                   <Input
-                    value={editForm.phone}
-                    onChange={(e) => setEditForm((p) => p && ({ ...p, phone: e.target.value }))}
-                    placeholder="(11) 99999-0000"
+                    value={maskPhone(editForm.phone)}
+                    onChange={(e) => setEditForm((p) => p && ({ ...p, phone: e.target.value.replace(/\D/g, '') }))}
+                    placeholder="(11) 99999-9999"
+                    maxLength={15}
                   />
                 </div>
               </div>
@@ -854,9 +853,10 @@ export function FornecedorDetalhe() {
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-foreground">Telefone</label>
               <Input
-                value={contactForm.phone}
-                onChange={(e) => setContactForm((p) => ({ ...p, phone: e.target.value }))}
-                placeholder="(11) 99999-0000"
+                value={maskPhone(contactForm.phone)}
+                onChange={(e) => setContactForm((p) => ({ ...p, phone: e.target.value.replace(/\D/g, '') }))}
+                placeholder="(11) 99999-9999"
+                maxLength={15}
               />
             </div>
             {contactError && (
@@ -907,6 +907,7 @@ export function FornecedorDetalhe() {
               <div className="space-y-1.5">
                 <label className="text-sm font-medium text-foreground">Número *</label>
                 <Input
+                  ref={fornNumeroRef}
                   value={addressForm.numero}
                   onChange={(e) => setAddressForm((p) => ({ ...p, numero: e.target.value }))}
                   placeholder="1234"
@@ -923,12 +924,31 @@ export function FornecedorDetalhe() {
             </div>
             <div className="grid grid-cols-3 gap-3">
               <div className="space-y-1.5">
-                <label className="text-sm font-medium text-foreground">CEP *</label>
+                <label className="text-sm font-medium text-foreground">
+                  CEP *{cepLoading && <span className="ml-1 text-xs font-normal text-muted-foreground">buscando…</span>}
+                  {cepNotFound && <span className="ml-1 text-xs font-normal text-destructive">não encontrado</span>}
+                </label>
                 <Input
-                  value={addressForm.cep}
-                  onChange={(e) => setAddressForm((p) => ({ ...p, cep: e.target.value }))}
+                  value={maskCep(addressForm.cep)}
                   placeholder="00000-000"
                   maxLength={9}
+                  onChange={async (e) => {
+                    const d = e.target.value.replace(/\D/g, '').slice(0, 8)
+                    setAddressForm((p) => ({ ...p, cep: d }))
+                    if (d.length === 8) {
+                      const r = await cepLookup(d)
+                      if (r) {
+                        setAddressForm((p) => ({
+                          ...p,
+                          logradouro: r.logradouro,
+                          bairro: r.bairro,
+                          cidade: r.localidade,
+                          estado: r.uf,
+                        }))
+                        fornNumeroRef.current?.focus()
+                      }
+                    }
+                  }}
                 />
               </div>
               <div className="space-y-1.5">

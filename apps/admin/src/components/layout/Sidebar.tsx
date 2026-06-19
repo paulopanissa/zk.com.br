@@ -97,7 +97,7 @@ export function Sidebar({ currentPath = '/' }: SidebarProps) {
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 overflow-y-auto py-3 px-2">
+      <nav className="flex-1 overflow-y-auto py-3 px-2 scrollbar-sidebar">
         {Object.entries(groups).map(([group, items]) => (
           <div key={group} className="mb-4">
             {!collapsed && (
