@@ -2,12 +2,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { ArrowDownCircle, ArrowUpCircle } from 'lucide-react'
-import {
-  type MovimentacaoMock,
-  type StockMovementType,
-  formatMovimentacaoTipo,
-  isEntrada,
-} from '@/data/estoque.mock'
+import { type StockMovement, type StockMovementType, formatMovimentacaoTipo, isEntrada } from '../types'
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleString('pt-BR', {
@@ -20,32 +15,47 @@ function formatDate(iso: string) {
 }
 
 const TYPE_COLOR: Record<StockMovementType, string> = {
-  PURCHASE_ENTRY: 'border-success/40 bg-success/10 text-success',
-  SALE_RETURN:    'border-success/40 bg-success/10 text-success',
-  MANUAL_ENTRY:   'border-success/40 bg-success/10 text-success',
-  TRANSFER_IN:    'border-success/40 bg-success/10 text-success',
-  SALE_OUT:       'border-primary/40 bg-primary/10 text-primary',
-  MANUAL_EXIT:    'border-warning/40 bg-warning/10 text-warning',
-  TRANSFER_OUT:   'border-muted bg-muted/30 text-muted-foreground',
-  PURCHASE_CANCEL:'border-destructive/40 bg-destructive/10 text-destructive',
+  PURCHASE_ENTRY:  'border-success/40 bg-success/10 text-success',
+  SALE_RETURN:     'border-success/40 bg-success/10 text-success',
+  MANUAL_ENTRY:    'border-success/40 bg-success/10 text-success',
+  TRANSFER_IN:     'border-success/40 bg-success/10 text-success',
+  SALE_OUT:        'border-primary/40 bg-primary/10 text-primary',
+  MANUAL_EXIT:     'border-warning/40 bg-warning/10 text-warning',
+  TRANSFER_OUT:    'border-muted bg-muted/30 text-muted-foreground',
+  PURCHASE_CANCEL: 'border-destructive/40 bg-destructive/10 text-destructive',
 }
 
 interface MovimentacoesTableProps {
-  movimentacoes: MovimentacaoMock[]
+  movimentacoes: StockMovement[]
+  loading: boolean
   page: number
   limit: number
   total: number
   onPageChange: (page: number) => void
 }
 
-export function MovimentacoesTable({
-  movimentacoes,
-  page,
-  limit,
-  total,
-  onPageChange,
-}: MovimentacoesTableProps) {
+export function MovimentacoesTable({ movimentacoes, loading, page, limit, total, onPageChange }: MovimentacoesTableProps) {
   const totalPages = Math.ceil(total / limit)
+
+  if (loading && movimentacoes.length === 0) {
+    return (
+      <div className="rounded-lg border border-border bg-card shadow-sm overflow-hidden">
+        <table className="w-full text-sm">
+          <tbody>
+            {Array.from({ length: 8 }).map((_, i) => (
+              <tr key={i} className="border-b border-border/50">
+                {[100, 130, 180, 80, 60, 80].map((w, j) => (
+                  <td key={j} className="px-4 py-4">
+                    <div className="h-4 bg-muted/60 rounded animate-pulse" style={{ width: w }} />
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )
+  }
 
   if (movimentacoes.length === 0) {
     return (
@@ -62,7 +72,7 @@ export function MovimentacoesTable({
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/30">
-              {['Data', 'Tipo', 'Produto', 'Lote', 'Quantidade', 'Origem', 'Usuário'].map((h) => (
+              {['Data', 'Tipo', 'Produto', 'Lote', 'Quantidade', 'Referência'].map((h) => (
                 <th
                   key={h}
                   className={cn(
@@ -78,6 +88,7 @@ export function MovimentacoesTable({
           <tbody>
             {movimentacoes.map((m, i) => {
               const entrada = isEntrada(m.type)
+              const qty = parseFloat(m.quantity)
 
               return (
                 <tr
@@ -88,7 +99,7 @@ export function MovimentacoesTable({
                   )}
                 >
                   <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">
-                    {formatDate(m.createdAt)}
+                    {formatDate(m.created_at)}
                   </td>
 
                   <td className="px-4 py-3">
@@ -98,42 +109,35 @@ export function MovimentacoesTable({
                   </td>
 
                   <td className="px-4 py-3">
-                    <p className="font-medium text-foreground leading-tight max-w-[180px] truncate">{m.productName}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5 font-mono">{m.sku}</p>
+                    <p className="font-medium text-foreground leading-tight max-w-[180px] truncate">{m.product.name}</p>
+                    {m.product.sku && (
+                      <p className="text-xs text-muted-foreground mt-0.5 font-mono">{m.product.sku}</p>
+                    )}
                   </td>
 
                   <td className="px-4 py-3">
-                    <span className="font-mono text-xs text-muted-foreground">{m.lotCode}</span>
+                    <span className="font-mono text-xs text-muted-foreground">{m.lot.code}</span>
                   </td>
 
                   <td className="px-4 py-3 text-right">
-                    <span
-                      className={cn(
-                        'inline-flex items-center gap-1 tabular-nums font-semibold',
-                        entrada ? 'text-success' : 'text-destructive',
-                      )}
-                    >
+                    <span className={cn('inline-flex items-center gap-1 tabular-nums font-semibold', entrada ? 'text-success' : 'text-destructive')}>
                       {entrada ? (
                         <ArrowDownCircle className="h-3.5 w-3.5" />
                       ) : (
                         <ArrowUpCircle className="h-3.5 w-3.5" />
                       )}
-                      {entrada ? '+' : '-'}{Math.abs(m.quantity).toLocaleString('pt-BR')}
+                      {entrada ? '+' : '-'}{Math.abs(qty).toLocaleString('pt-BR')}
                     </span>
                   </td>
 
-                  <td className="px-4 py-3 text-xs text-muted-foreground">
-                    {m.referenceId ? (
-                      <span className="font-mono">{m.referenceId}</span>
+                  <td className="px-4 py-3 text-xs text-muted-foreground max-w-[160px] truncate">
+                    {m.reference_id ? (
+                      <span className="font-mono">{m.reference_id.slice(0, 8)}…</span>
                     ) : m.notes ? (
                       <span className="italic">{m.notes}</span>
                     ) : (
                       '—'
                     )}
-                  </td>
-
-                  <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">
-                    {m.createdBy}
                   </td>
                 </tr>
               )
