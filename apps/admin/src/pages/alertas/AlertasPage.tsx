@@ -40,15 +40,23 @@ function formatDateTime(iso: string) {
 function RegrasTab({
   regras,
   loading,
+  togglingId,
+  deleteConfirmId,
   onEdit,
   onToggle,
   onDelete,
+  onDeleteConfirm,
+  onDeleteCancel,
 }: {
   regras: AlertaRegra[]
   loading: boolean
+  togglingId: string | null
+  deleteConfirmId: string | null
   onEdit: (r: AlertaRegra) => void
   onToggle: (r: AlertaRegra) => void
   onDelete: (r: AlertaRegra) => void
+  onDeleteConfirm: () => void
+  onDeleteCancel: () => void
 }) {
   if (loading) {
     return (
@@ -87,7 +95,7 @@ function RegrasTab({
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/30">
-              {['Nome', 'Tipo', 'Threshold', 'Produto', 'Ativo', 'Ações'].map((h) => (
+              {['Nome', 'Tipo', 'Limite', 'Produto', 'Ativo', 'Ações'].map((h) => (
                 <th
                   key={h}
                   className={cn(
@@ -104,12 +112,16 @@ function RegrasTab({
           <tbody>
             {regras.map((r) => {
               const tc = ALERT_TYPE_CONFIG[r.type]
+              const isToggling = togglingId === r.id
+              const isDeleteConfirm = deleteConfirmId === r.id
+
               return (
                 <tr
                   key={r.id}
                   className={cn(
                     'border-b border-border/50 transition-colors hover:bg-muted/10',
                     !r.active && 'opacity-60',
+                    isDeleteConfirm && 'bg-destructive/5',
                   )}
                 >
                   <td className="px-4 py-3">
@@ -139,11 +151,13 @@ function RegrasTab({
                   <td className="px-4 py-3 text-center">
                     <button
                       type="button"
+                      disabled={isToggling}
                       onClick={() => onToggle(r)}
                       aria-label={r.active ? 'Desativar regra' : 'Ativar regra'}
                       className={cn(
-                        'relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200',
+                        'relative inline-flex h-5 w-9 shrink-0 rounded-full border-2 border-transparent transition-colors duration-200',
                         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
+                        isToggling ? 'cursor-wait opacity-50' : 'cursor-pointer',
                         r.active ? 'bg-success' : 'bg-muted-foreground/30',
                       )}
                     >
@@ -157,26 +171,48 @@ function RegrasTab({
                   </td>
 
                   <td className="px-4 py-3">
-                    <div className="flex items-center gap-1 justify-end">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 text-muted-foreground hover:text-foreground"
-                        onClick={() => onEdit(r)}
-                        title="Editar"
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                        onClick={() => onDelete(r)}
-                        title="Excluir"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
+                    {isDeleteConfirm ? (
+                      <div className="flex items-center gap-2 justify-end">
+                        <span className="text-xs text-muted-foreground whitespace-nowrap">Confirmar exclusão?</span>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          className="h-7 text-xs"
+                          onClick={onDeleteConfirm}
+                        >
+                          Excluir
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 text-xs"
+                          onClick={onDeleteCancel}
+                        >
+                          Cancelar
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1 justify-end">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                          onClick={() => onEdit(r)}
+                          title="Editar"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                          onClick={() => onDelete(r)}
+                          title="Excluir"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    )}
                   </td>
                 </tr>
               )
@@ -197,6 +233,7 @@ function EventosTab({
   total,
   page,
   loading,
+  error,
   typeFiltro,
   dataInicio,
   dataFim,
@@ -209,6 +246,7 @@ function EventosTab({
   total: number
   page: number
   loading: boolean
+  error: boolean
   typeFiltro: 'all' | AlertType
   dataInicio: string
   dataFim: string
@@ -273,6 +311,12 @@ function EventosTab({
       </div>
 
       {/* Table */}
+      {error && (
+        <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          Não foi possível carregar o histórico de eventos. Tente novamente.
+        </div>
+      )}
+
       {loading ? (
         <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
           <div className="p-4 space-y-3">
@@ -286,7 +330,7 @@ function EventosTab({
             ))}
           </div>
         </div>
-      ) : eventos.length === 0 ? (
+      ) : !error && eventos.length === 0 ? (
         <div className="rounded-xl border border-border bg-card shadow-sm py-20 text-center">
           <History className="h-8 w-8 text-muted-foreground mx-auto mb-3 opacity-40" />
           <p className="text-sm font-medium text-foreground mb-1">
@@ -385,6 +429,8 @@ export function AlertasPage() {
   const [regras, setRegras] = useState<AlertaRegra[]>([])
   const [regrasLoading, setRegrasLoading] = useState(true)
   const [regrasError, setRegrasError] = useState<string | null>(null)
+  const [togglingId, setTogglingId] = useState<string | null>(null)
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
 
   // Modal
   const [modalOpen, setModalOpen] = useState(false)
@@ -395,6 +441,7 @@ export function AlertasPage() {
   const [eventosTotal, setEventosTotal] = useState(0)
   const [eventosPage, setEventosPage] = useState(1)
   const [eventosLoading, setEventosLoading] = useState(true)
+  const [eventosError, setEventosError] = useState(false)
   const [typeFiltro, setTypeFiltro] = useState<'all' | AlertType>('all')
   const [dataInicio, setDataInicio] = useState('')
   const [dataFim, setDataFim] = useState('')
@@ -415,6 +462,7 @@ export function AlertasPage() {
 
   const loadEventos = useCallback(() => {
     setEventosLoading(true)
+    setEventosError(false)
     const params: Record<string, unknown> = { page: eventosPage, limit: EVENTOS_LIMIT }
     if (typeFiltro !== 'all') params.type = typeFiltro
     if (dataInicio) params.data_inicio = dataInicio
@@ -426,7 +474,7 @@ export function AlertasPage() {
         setEventos(r.data.data)
         setEventosTotal(r.data.total)
       })
-      .catch(() => {/* shown via empty state */})
+      .catch(() => setEventosError(true))
       .finally(() => setEventosLoading(false))
   }, [eventosPage, typeFiltro, dataInicio, dataFim])
 
@@ -450,6 +498,8 @@ export function AlertasPage() {
   }
 
   async function handleToggle(r: AlertaRegra) {
+    if (togglingId) return
+    setTogglingId(r.id)
     setRegras((prev) =>
       prev.map((item) => (item.id === r.id ? { ...item, active: !item.active } : item)),
     )
@@ -459,11 +509,19 @@ export function AlertasPage() {
       setRegras((prev) =>
         prev.map((item) => (item.id === r.id ? { ...item, active: r.active } : item)),
       )
+    } finally {
+      setTogglingId(null)
     }
   }
 
-  async function handleDelete(r: AlertaRegra) {
-    if (!confirm(`Excluir a regra "${r.name}"?\n\nEsta ação não pode ser desfeita.`)) return
+  function handleDelete(r: AlertaRegra) {
+    setDeleteConfirmId(r.id)
+  }
+
+  async function handleDeleteConfirm() {
+    const r = regras.find((item) => item.id === deleteConfirmId)
+    if (!r) return
+    setDeleteConfirmId(null)
     setRegras((prev) => prev.filter((item) => item.id !== r.id))
     try {
       await api.delete(`/alertas/regras/${r.id}`)
@@ -514,9 +572,13 @@ export function AlertasPage() {
           <RegrasTab
             regras={regras}
             loading={regrasLoading}
+            togglingId={togglingId}
+            deleteConfirmId={deleteConfirmId}
             onEdit={handleEdit}
             onToggle={handleToggle}
             onDelete={handleDelete}
+            onDeleteConfirm={handleDeleteConfirm}
+            onDeleteCancel={() => setDeleteConfirmId(null)}
           />
         </TabsContent>
 
@@ -526,6 +588,7 @@ export function AlertasPage() {
             total={eventosTotal}
             page={eventosPage}
             loading={eventosLoading}
+            error={eventosError}
             typeFiltro={typeFiltro}
             dataInicio={dataInicio}
             dataFim={dataFim}

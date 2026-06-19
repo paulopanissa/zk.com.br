@@ -155,7 +155,7 @@ export function AlertaRuleModal({ open, onClose, regra, onSaved }: Props) {
           {showThreshold && (
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <label className="text-sm font-medium text-foreground">Threshold</label>
+                <label className="text-sm font-medium text-foreground">Limite mínimo</label>
                 <Input
                   type="number"
                   min={0}
