@@ -23,6 +23,7 @@ import { LotesPage } from '@/pages/lotes/LotesPage'
 import { RelatoriosPage } from '@/pages/relatorios/RelatoriosPage'
 import { AlertasPage } from '@/pages/alertas/AlertasPage'
 import { AiKeysPage } from '@/pages/ai-keys/AiKeysPage'
+import { LgpdPage } from '@/pages/lgpd/LgpdPage'
 
 function AppRoutes() {
   return (
@@ -54,6 +55,7 @@ function AppRoutes() {
                 <Route path="/relatorios" element={<RelatoriosPage />} />
                 <Route path="/alertas" element={<AlertasPage />} />
                 <Route path="/ai-keys" element={<AiKeysPage />} />
+                <Route path="/lgpd" element={<LgpdPage />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </AdminShell>
