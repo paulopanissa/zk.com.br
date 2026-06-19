@@ -17,6 +17,7 @@ export class VendasRepository {
   async findAll(
     unitId: string,
     filters: {
+      numero?: number;
       status?: VendaStatus;
       origem?: VendaOrigem;
       cliente_id?: string;
@@ -26,6 +27,7 @@ export class VendasRepository {
     pagination: { page: number; limit: number },
   ) {
     const where: Prisma.VendaWhereInput = { unidade_id: unitId };
+    if (filters.numero) where.numero = filters.numero;
     if (filters.status) where.status = filters.status;
     if (filters.origem) where.origem = filters.origem;
     if (filters.cliente_id) where.cliente_id = filters.cliente_id;

@@ -1,9 +1,16 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { VendaOrigem, VendaStatus } from '@prisma/client';
 import { Transform } from 'class-transformer';
-import { IsDateString, IsEnum, IsInt, IsOptional, IsUUID, Max, Min } from 'class-validator';
+import { IsDateString, IsEnum, IsInt, IsOptional, IsPositive, IsUUID, Max, Min } from 'class-validator';
 
 export class QueryVendaDto {
+  @ApiPropertyOptional({ description: 'Filtrar por número do pedido' })
+  @IsInt()
+  @IsPositive()
+  @Transform(({ value }) => parseInt(value as string, 10))
+  @IsOptional()
+  numero?: number;
+
   @ApiPropertyOptional({ enum: VendaStatus, description: 'Filtrar por status' })
   @IsEnum(VendaStatus)
   @IsOptional()
