@@ -4,11 +4,13 @@ import { Edit2, Eye, Plus, Search, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+  Sheet,
+  SheetBody,
+  SheetContent,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { api } from '@/lib/api'
@@ -401,15 +403,15 @@ export function FornecedoresPage() {
         </div>
       )}
 
-      {/* Create / Edit modal */}
-      <Dialog open={modal !== null} onOpenChange={(open) => { if (!open) setModal(null) }}>
-        <DialogContent className="sm:max-w-md" onInteractOutside={(e) => e.preventDefault()}>
-          <DialogHeader>
-            <DialogTitle>
+      {/* Create / Edit sheet */}
+      <Sheet open={modal !== null} onOpenChange={(open) => { if (!open) setModal(null) }}>
+        <SheetContent>
+          <SheetHeader>
+            <SheetTitle>
               {modal?.mode === 'create' ? 'Novo fornecedor' : 'Editar fornecedor'}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 pt-2">
+            </SheetTitle>
+          </SheetHeader>
+          <SheetBody className="space-y-5">
             {/* Document */}
             <div className="space-y-1.5">
               <label htmlFor="sup-document" className="text-sm font-medium text-foreground">
@@ -502,7 +504,7 @@ export function FornecedoresPage() {
                 value={form.notes}
                 onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))}
                 placeholder="Notas internas sobre o fornecedor"
-                rows={3}
+                rows={4}
                 className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 resize-none"
               />
             </div>
@@ -528,18 +530,17 @@ export function FornecedoresPage() {
                 {formError}
               </p>
             )}
-
-            <div className="flex justify-end gap-3 pt-2">
-              <Button variant="outline" onClick={() => setModal(null)}>
-                Cancelar
-              </Button>
-              <Button onClick={handleSave} disabled={saving}>
-                {saving ? 'Salvando…' : 'Salvar'}
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+          </SheetBody>
+          <SheetFooter>
+            <Button variant="outline" onClick={() => setModal(null)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleSave} disabled={saving}>
+              {saving ? 'Salvando…' : 'Salvar'}
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
     </div>
   )
 }
