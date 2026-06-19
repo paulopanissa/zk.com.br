@@ -1,32 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ProdutosFilter, type ProdutosFiltros, type NamedItem } from './components/ProdutosFilter'
 import { ProdutosTable } from './components/ProdutosTable'
 import { api } from '@/lib/api'
-import { type ProdutoMock } from '@/data/produtos.mock'
+import { type Product, type ProductListResponse } from './types'
 
 const LIMIT = 20
-
-interface ApiProduct {
-  id: string
-  name: string
-  sku: string | null
-  active: boolean
-  featured: boolean
-  min_stock: number
-  pricing: { sale_price_cents: number; cost_price_cents: number } | null
-  category: { id: string; name: string; slug: string } | null
-  brand: { id: string; name: string; slug: string } | null
-  media: { url: string }[]
-}
-
-interface ApiListResponse {
-  data: ApiProduct[]
-  total: number
-  page: number
-  limit: number
-}
 
 interface CategoryFlat {
   id: string
@@ -39,23 +19,6 @@ interface BrandPage {
   total: number
 }
 
-function toMock(p: ApiProduct): ProdutoMock {
-  return {
-    id: p.id,
-    nome: p.name,
-    sku: p.sku ?? '',
-    categoria: p.category?.name ?? '—',
-    marca: p.brand?.name ?? '—',
-    precoVenda: p.pricing?.sale_price_cents ?? 0,
-    precoCusto: p.pricing?.cost_price_cents ?? 0,
-    estoque: 0,
-    estoqueMinimo: p.min_stock,
-    ativo: p.active,
-    destaque: p.featured,
-    imagem: p.media[0]?.url,
-  }
-}
-
 export function ProdutosPage() {
   const [filtros, setFiltros] = useState<ProdutosFiltros>({
     busca: '',
@@ -65,14 +28,13 @@ export function ProdutosPage() {
     destaque: false,
   })
   const [page, setPage] = useState(1)
-  const [produtos, setProdutos] = useState<ProdutoMock[]>([])
+  const [produtos, setProdutos] = useState<Product[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState(false)
   const [categorias, setCategorias] = useState<NamedItem[]>([])
   const [marcas, setMarcas] = useState<NamedItem[]>([])
 
-  // Load filter options once
   useEffect(() => {
     api.get<CategoryFlat[]>('/categories/flat').then((r) =>
       setCategorias(r.data.map((c) => ({ id: c.id, name: c.name })))
@@ -83,27 +45,33 @@ export function ProdutosPage() {
     ).catch(() => {})
   }, [])
 
-  // Load products on filter/page change
-  useEffect(() => {
+  const loadProdutos = useCallback(async (signal?: AbortSignal) => {
     setLoading(true)
-    setError(null)
+    setError(false)
+    try {
+      const params: Record<string, string | number | boolean> = { page, limit: LIMIT }
+      if (filtros.busca) params.name = filtros.busca
+      if (filtros.categoria !== 'all') params.category_id = filtros.categoria
+      if (filtros.marca !== 'all') params.brand_id = filtros.marca
+      if (filtros.somenteAtivos) params.active = true
+      if (filtros.destaque) params.featured = true
 
-    const params: Record<string, string | number | boolean> = { page, limit: LIMIT }
-    if (filtros.busca) params.name = filtros.busca
-    if (filtros.categoria !== 'all') params.category_id = filtros.categoria
-    if (filtros.marca !== 'all') params.brand_id = filtros.marca
-    if (filtros.somenteAtivos) params.active = true
-    if (filtros.destaque) params.featured = true
+      const r = await api.get<ProductListResponse>('/products', { params, signal })
+      setProdutos(r.data.data)
+      setTotal(r.data.total)
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === 'CanceledError') return
+      setError(true)
+    } finally {
+      setLoading(false)
+    }
+  }, [page, filtros])
 
-    api
-      .get<ApiListResponse>('/products', { params })
-      .then((res) => {
-        setProdutos(res.data.data.map(toMock))
-        setTotal(res.data.total)
-      })
-      .catch(() => setError('Não foi possível carregar os produtos.'))
-      .finally(() => setLoading(false))
-  }, [filtros, page])
+  useEffect(() => {
+    const controller = new AbortController()
+    loadProdutos(controller.signal)
+    return () => controller.abort()
+  }, [loadProdutos])
 
   function handleFiltrosChange(novosFiltros: ProdutosFiltros) {
     setFiltros(novosFiltros)
@@ -113,8 +81,15 @@ export function ProdutosPage() {
   return (
     <div className="p-6 space-y-5">
       <div className="flex items-center justify-between">
-        <h1 className="font-display text-3xl font-bold text-foreground">Produtos</h1>
-        <Button className="bg-primary text-primary-foreground hover:bg-primary/90 gap-2">
+        <div>
+          <h1 className="font-display text-3xl font-bold text-foreground">Produtos</h1>
+          {!error && (
+            <p className="text-sm text-muted-foreground mt-1">
+              {total} produto{total !== 1 ? 's' : ''} cadastrado{total !== 1 ? 's' : ''}
+            </p>
+          )}
+        </div>
+        <Button className="gap-2">
           <Plus className="h-4 w-4" />
           Novo produto
         </Button>
@@ -128,24 +103,22 @@ export function ProdutosPage() {
       />
 
       {error && (
-        <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-          {error}
+        <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          Não foi possível carregar os produtos.{' '}
+          <button className="underline font-medium" onClick={() => loadProdutos()}>
+            Tentar novamente
+          </button>
         </div>
       )}
 
-      {loading ? (
-        <div className="flex items-center justify-center py-16 text-muted-foreground text-sm">
-          Carregando produtos…
-        </div>
-      ) : (
-        <ProdutosTable
-          produtos={produtos}
-          page={page}
-          limit={LIMIT}
-          total={total}
-          onPageChange={setPage}
-        />
-      )}
+      <ProdutosTable
+        produtos={produtos}
+        loading={loading}
+        page={page}
+        limit={LIMIT}
+        total={total}
+        onPageChange={setPage}
+      />
     </div>
   )
 }
