@@ -85,8 +85,8 @@ export function PedidoDetalhe() {
     setCancelando(true)
     setCancelError(null)
     try {
-      await api.post(`/vendas/${id}/cancelar`)
-      setVenda((prev) => prev ? { ...prev, status: 'CANCELADA' } : prev)
+      const r = await api.post<VendaDetail>(`/vendas/${id}/cancelar`)
+      setVenda(r.data)
       setCancelConfirm(false)
     } catch {
       setCancelError('Não foi possível cancelar o pedido. Tente novamente.')

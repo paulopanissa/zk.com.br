@@ -74,11 +74,12 @@ export class VendasService {
     return this.repository.findAll(
       unitId,
       {
+        numero: query.numero,
         status: query.status,
         origem: query.origem,
         cliente_id: query.cliente_id,
         data_inicio: query.data_inicio ? new Date(query.data_inicio) : undefined,
-        data_fim: query.data_fim ? new Date(query.data_fim) : undefined,
+        data_fim: query.data_fim ? new Date(query.data_fim + 'T23:59:59.999Z') : undefined,
       },
       { page: query.page ?? 1, limit: query.limit ?? 20 },
     );
