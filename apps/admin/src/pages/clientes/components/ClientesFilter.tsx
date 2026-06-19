@@ -1,41 +1,27 @@
 import { Search, X } from 'lucide-react'
 import { Input } from '@/components/ui/input'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
 export interface ClientesFiltros {
   busca: string
-  uf: string
   somenteAtivos: boolean
-  comConsentimento: boolean
 }
 
 interface ClientesFilterProps {
   filtros: ClientesFiltros
-  ufs: string[]
   onChange: (filtros: ClientesFiltros) => void
 }
 
-export function ClientesFilter({ filtros, ufs, onChange }: ClientesFilterProps) {
-  const temFiltro =
-    filtros.busca ||
-    filtros.uf !== 'all' ||
-    filtros.somenteAtivos ||
-    filtros.comConsentimento
+export function ClientesFilter({ filtros, onChange }: ClientesFilterProps) {
+  const temFiltro = filtros.busca || filtros.somenteAtivos
 
   function set<K extends keyof ClientesFiltros>(key: K, value: ClientesFiltros[K]) {
     onChange({ ...filtros, [key]: value })
   }
 
   function limpar() {
-    onChange({ busca: '', uf: 'all', somenteAtivos: false, comConsentimento: false })
+    onChange({ busca: '', somenteAtivos: false })
   }
 
   return (
@@ -51,32 +37,11 @@ export function ClientesFilter({ filtros, ufs, onChange }: ClientesFilterProps) 
           />
         </div>
 
-        <Select value={filtros.uf} onValueChange={(v) => set('uf', v)}>
-          <SelectTrigger className="w-[120px]">
-            <SelectValue placeholder="Estado" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todos os estados</SelectItem>
-            {ufs.map((uf) => (
-              <SelectItem key={uf} value={uf}>
-                {uf}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <div className="flex items-center gap-3">
-          <ToggleChip
-            label="Somente ativos"
-            active={filtros.somenteAtivos}
-            onClick={() => set('somenteAtivos', !filtros.somenteAtivos)}
-          />
-          <ToggleChip
-            label="Com consentimento LGPD"
-            active={filtros.comConsentimento}
-            onClick={() => set('comConsentimento', !filtros.comConsentimento)}
-          />
-        </div>
+        <ToggleChip
+          label="Somente ativos"
+          active={filtros.somenteAtivos}
+          onClick={() => set('somenteAtivos', !filtros.somenteAtivos)}
+        />
 
         {temFiltro && (
           <Button variant="ghost" size="sm" onClick={limpar} className="text-muted-foreground">

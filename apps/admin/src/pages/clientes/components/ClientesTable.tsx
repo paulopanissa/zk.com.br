@@ -4,29 +4,44 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { maskPhone } from '@/lib/formatters'
-import { type ClienteMock } from '@/data/clientes.mock'
-
-function formatBRL(centavos: number) {
-  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
-    centavos / 100,
-  )
-}
+import { type Cliente } from '../types'
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('pt-BR')
 }
 
 interface ClientesTableProps {
-  clientes: ClienteMock[]
+  clientes: Cliente[]
+  loading: boolean
   page: number
   limit: number
   total: number
   onPageChange: (page: number) => void
 }
 
-export function ClientesTable({ clientes, page, limit, total, onPageChange }: ClientesTableProps) {
+export function ClientesTable({ clientes, loading, page, limit, total, onPageChange }: ClientesTableProps) {
   const navigate = useNavigate()
   const totalPages = Math.ceil(total / limit)
+
+  if (loading && clientes.length === 0) {
+    return (
+      <div className="rounded-lg border border-border bg-card shadow-sm overflow-hidden">
+        <table className="w-full text-sm">
+          <tbody>
+            {Array.from({ length: 8 }).map((_, i) => (
+              <tr key={i} className="border-b border-border/50">
+                {[200, 180, 100, 80, 32].map((w, j) => (
+                  <td key={j} className="px-4 py-4">
+                    <div className="h-4 bg-muted/60 rounded animate-pulse" style={{ width: w }} />
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )
+  }
 
   if (clientes.length === 0) {
     return <EmptyState />
@@ -38,16 +53,22 @@ export function ClientesTable({ clientes, page, limit, total, onPageChange }: Cl
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/30">
-              {['Cliente', 'Contato', 'Cidade/UF', 'Cadastro', 'Total gasto', 'Pedidos', 'Status', ''].map((h) => (
+              {[
+                { key: 'cliente', label: 'Cliente' },
+                { key: 'contato', label: 'Contato' },
+                { key: 'cadastro', label: 'Cadastro' },
+                { key: 'status', label: 'Status' },
+                { key: 'action', label: '' },
+              ].map(({ key, label }) => (
                 <th
-                  key={h}
+                  key={key}
                   className={cn(
-                    'px-4 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground',
-                    h === 'Total gasto' || h === 'Pedidos' ? 'text-right' : h === 'Status' ? 'text-center' : 'text-left',
-                    h === '' && 'w-16',
+                    'px-4 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground text-left',
+                    key === 'status' && 'text-center',
+                    key === 'action' && 'w-16',
                   )}
                 >
-                  {h}
+                  {label}
                 </th>
               ))}
             </tr>
@@ -68,37 +89,21 @@ export function ClientesTable({ clientes, page, limit, total, onPageChange }: Cl
                     <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary font-semibold text-xs">
                       {c.nome.split(' ').slice(0, 2).map((n) => n[0]).join('')}
                     </div>
-                    <div>
-                      <p className="font-medium text-foreground">{c.nome}</p>
-                      <p className="text-xs text-muted-foreground">{c.cpfCnpjMascarado}</p>
-                    </div>
+                    <p className="font-medium text-foreground">{c.nome}</p>
                   </div>
                 </td>
 
                 {/* Contato */}
                 <td className="px-4 py-3">
-                  <p className="text-foreground">{c.email}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">{c.telefonePrincipal ? maskPhone(c.telefonePrincipal) : ''}</p>
-                </td>
-
-                {/* Cidade/UF */}
-                <td className="px-4 py-3 text-muted-foreground">
-                  {c.cidade}/{c.uf}
+                  {c.email && <p className="text-foreground">{c.email}</p>}
+                  {c.telefone_principal && (
+                    <p className="text-xs text-muted-foreground mt-0.5">{maskPhone(c.telefone_principal)}</p>
+                  )}
                 </td>
 
                 {/* Cadastro */}
                 <td className="px-4 py-3 text-muted-foreground tabular-nums">
-                  {formatDate(c.dataCadastro)}
-                </td>
-
-                {/* Total gasto */}
-                <td className="px-4 py-3 text-right font-medium tabular-nums text-foreground">
-                  {formatBRL(c.totalGastoCentavos)}
-                </td>
-
-                {/* Pedidos */}
-                <td className="px-4 py-3 text-right tabular-nums text-foreground">
-                  {c.totalPedidos}
+                  {formatDate(c.created_at)}
                 </td>
 
                 {/* Status */}
@@ -115,7 +120,7 @@ export function ClientesTable({ clientes, page, limit, total, onPageChange }: Cl
                     >
                       {c.ativo ? 'Ativo' : 'Inativo'}
                     </Badge>
-                    {c.consentimentoLgpd && (
+                    {c.consentimento_lgpd && (
                       <span title="Consentimento LGPD">
                         <Shield className="h-3 w-3 text-muted-foreground" />
                       </span>
