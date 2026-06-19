@@ -109,11 +109,13 @@ export class LotsRepository {
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() + days);
 
+    const now = new Date();
     const where: Prisma.LotWhereInput = {
       unidade_id: unitId,
       active: true,
       expires_at: {
         not: null,
+        gte: now,
         lte: cutoff,
       },
     };

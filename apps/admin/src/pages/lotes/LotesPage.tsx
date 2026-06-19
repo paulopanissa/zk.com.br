@@ -44,7 +44,7 @@ function statusToApiParams(
 type StatusFiltro = 'all' | 'valido' | 'vencendo' | 'vencido'
 
 const STATUS_CHIPS: { value: StatusFiltro; label: string }[] = [
-  { value: 'valido', label: 'Válidos' },
+  { value: 'valido', label: 'Com validade futura' },
   { value: 'vencendo', label: 'Vencendo em 30d' },
   { value: 'vencido', label: 'Vencidos' },
 ]
