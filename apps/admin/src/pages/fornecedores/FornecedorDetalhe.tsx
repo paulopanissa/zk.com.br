@@ -515,9 +515,9 @@ export function FornecedorDetalhe() {
       <div className="p-6">
         <div className="mb-6 h-9 w-36 animate-pulse rounded-lg bg-surface-alt" />
         <div className="rounded-2xl bg-surface-alt h-48 animate-pulse mb-5" />
-        <div className="space-y-4">
-          <div className="rounded-xl bg-surface-alt h-32 animate-pulse" />
-          <div className="rounded-xl bg-surface-alt h-32 animate-pulse" />
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+          <div className="rounded-xl bg-surface-alt h-48 animate-pulse" />
+          <div className="rounded-xl bg-surface-alt h-48 animate-pulse" />
         </div>
       </div>
     )
@@ -536,7 +536,7 @@ export function FornecedorDetalhe() {
   }
 
   return (
-    <div className="p-6 space-y-5 max-w-4xl">
+    <div className="p-6 space-y-5">
       {/* Back link */}
       <button
         onClick={() => navigate('/fornecedores')}
@@ -621,94 +621,99 @@ export function FornecedorDetalhe() {
         )}
       </div>
 
-      {/* ── Contacts section ───────────────────────────────────────────────── */}
-      <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-orange/10">
-              <Users className="h-4 w-4 text-brand-orange" />
+      {/* ── Contacts + Addresses grid ──────────────────────────────────────── */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+
+        {/* Contacts section */}
+        <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-orange/10">
+                <Users className="h-4 w-4 text-brand-orange" />
+              </div>
+              <div>
+                <h2 className="text-sm font-semibold text-foreground">Contatos</h2>
+                <p className="text-xs text-muted-foreground">
+                  {supplier.contacts.length === 0
+                    ? 'Nenhum'
+                    : `${supplier.contacts.length} representante${supplier.contacts.length !== 1 ? 's' : ''}`}
+                </p>
+              </div>
             </div>
-            <div>
-              <h2 className="text-sm font-semibold text-foreground">Contatos</h2>
-              <p className="text-xs text-muted-foreground">
-                {supplier.contacts.length === 0
-                  ? 'Nenhum'
-                  : `${supplier.contacts.length} representante${supplier.contacts.length !== 1 ? 's' : ''}`}
-              </p>
-            </div>
+            <Button size="sm" className="gap-1.5 h-8" onClick={openCreateContact}>
+              <Plus className="h-3.5 w-3.5" />
+              Adicionar
+            </Button>
           </div>
-          <Button size="sm" className="gap-1.5 h-8" onClick={openCreateContact}>
-            <Plus className="h-3.5 w-3.5" />
-            Adicionar
-          </Button>
-        </div>
 
-        <div className="p-4">
-          {supplier.contacts.length === 0 ? (
-            <EmptySection
-              icon={User}
-              label="Sem representantes"
-              hint="Adicione contatos para facilitar a comunicação com este fornecedor."
-              onAdd={openCreateContact}
-            />
-          ) : (
-            <div className="space-y-3">
-              {supplier.contacts.map((c) => (
-                <ContactCard
-                  key={c.id}
-                  contact={c}
-                  onEdit={() => openEditContact(c)}
-                  onDelete={() => handleDeleteContact(c)}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* ── Addresses section ──────────────────────────────────────────────── */}
-      <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-sage/30">
-              <MapPin className="h-4 w-4 text-brand-brown" />
-            </div>
-            <div>
-              <h2 className="text-sm font-semibold text-foreground">Endereços</h2>
-              <p className="text-xs text-muted-foreground">
-                {supplier.addresses.length === 0
-                  ? 'Nenhum'
-                  : `${supplier.addresses.length} endereço${supplier.addresses.length !== 1 ? 's' : ''}`}
-              </p>
-            </div>
+          <div className="p-4">
+            {supplier.contacts.length === 0 ? (
+              <EmptySection
+                icon={User}
+                label="Sem representantes"
+                hint="Adicione contatos para facilitar a comunicação com este fornecedor."
+                onAdd={openCreateContact}
+              />
+            ) : (
+              <div className="space-y-3">
+                {supplier.contacts.map((c) => (
+                  <ContactCard
+                    key={c.id}
+                    contact={c}
+                    onEdit={() => openEditContact(c)}
+                    onDelete={() => handleDeleteContact(c)}
+                  />
+                ))}
+              </div>
+            )}
           </div>
-          <Button size="sm" className="gap-1.5 h-8" onClick={openCreateAddress}>
-            <Plus className="h-3.5 w-3.5" />
-            Adicionar
-          </Button>
         </div>
 
-        <div className="p-4">
-          {supplier.addresses.length === 0 ? (
-            <EmptySection
-              icon={MapPin}
-              label="Sem endereços"
-              hint="Cadastre os endereços de entrega e cobrança deste fornecedor."
-              onAdd={openCreateAddress}
-            />
-          ) : (
-            <div className="space-y-3">
-              {supplier.addresses.map((a) => (
-                <AddressCard
-                  key={a.id}
-                  address={a}
-                  onEdit={() => openEditAddress(a)}
-                  onDelete={() => handleDeleteAddress(a)}
-                />
-              ))}
+        {/* Addresses section */}
+        <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-sage/30">
+                <MapPin className="h-4 w-4 text-brand-brown" />
+              </div>
+              <div>
+                <h2 className="text-sm font-semibold text-foreground">Endereços</h2>
+                <p className="text-xs text-muted-foreground">
+                  {supplier.addresses.length === 0
+                    ? 'Nenhum'
+                    : `${supplier.addresses.length} endereço${supplier.addresses.length !== 1 ? 's' : ''}`}
+                </p>
+              </div>
             </div>
-          )}
+            <Button size="sm" className="gap-1.5 h-8" onClick={openCreateAddress}>
+              <Plus className="h-3.5 w-3.5" />
+              Adicionar
+            </Button>
+          </div>
+
+          <div className="p-4">
+            {supplier.addresses.length === 0 ? (
+              <EmptySection
+                icon={MapPin}
+                label="Sem endereços"
+                hint="Cadastre os endereços de entrega e cobrança deste fornecedor."
+                onAdd={openCreateAddress}
+              />
+            ) : (
+              <div className="space-y-3">
+                {supplier.addresses.map((a) => (
+                  <AddressCard
+                    key={a.id}
+                    address={a}
+                    onEdit={() => openEditAddress(a)}
+                    onDelete={() => handleDeleteAddress(a)}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
         </div>
+
       </div>
 
       {/* ── Edit supplier modal ────────────────────────────────────────────── */}
