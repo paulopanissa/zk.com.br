@@ -3,6 +3,7 @@ import { ArrowLeft, Shield, MapPin, ShoppingBag, CheckCircle, XCircle, Clock } f
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { maskPhone } from '@/lib/formatters'
 import { CLIENTES_MOCK, CLIENTE_DETALHE_MOCK, type PedidoClienteMock } from '@/data/clientes.mock'
 
 function formatBRL(centavos: number) {
@@ -132,7 +133,7 @@ export function ClienteDetalhe() {
           <Field label="CPF/CNPJ" value={base.cpfCnpjMascarado} />
           <Field label="Data de nascimento" value={detalhe?.dataNascimento ? formatDate(detalhe.dataNascimento) : '***'} />
           <Field label="E-mail" value={base.email} />
-          <Field label="Telefone" value={base.telefonePrincipal} />
+          <Field label="Telefone" value={base.telefonePrincipal ? maskPhone(base.telefonePrincipal) : ''} />
           <Field label="Cadastrado em" value={formatDate(base.dataCadastro)} />
         </div>
       </Section>

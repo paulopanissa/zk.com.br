@@ -32,6 +32,7 @@ import {
 } from '@/components/ui/sheet'
 import { cn } from '@/lib/utils'
 import { api } from '@/lib/api'
+import { maskPhone } from '@/lib/formatters'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -157,12 +158,6 @@ function formatDocument(doc: string): string {
   return doc
 }
 
-function formatPhone(phone: string): string {
-  const d = phone.replace(/\D/g, '')
-  if (d.length === 11) return d.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3')
-  if (d.length === 10) return d.replace(/(\d{2})(\d{4})(\d{4})/, '($1) $2-$3')
-  return phone
-}
 
 function initials(name: string): string {
   return name
@@ -204,7 +199,7 @@ function ContactCard({
           {contact.phone && (
             <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <Phone className="h-3.5 w-3.5 shrink-0" />
-              {formatPhone(contact.phone)}
+              {maskPhone(contact.phone)}
             </span>
           )}
         </div>
@@ -604,7 +599,7 @@ export function FornecedorDetalhe() {
             {supplier.phone && (
               <span className="flex items-center gap-2 text-sm text-brand-cream/70">
                 <Phone className="h-4 w-4 shrink-0" />
-                {formatPhone(supplier.phone)}
+                {maskPhone(supplier.phone)}
               </span>
             )}
             {supplier.website && (
@@ -761,9 +756,10 @@ export function FornecedorDetalhe() {
                 <div className="space-y-1.5">
                   <label className="text-sm font-medium text-foreground">Telefone</label>
                   <Input
-                    value={editForm.phone}
-                    onChange={(e) => setEditForm((p) => p && ({ ...p, phone: e.target.value }))}
-                    placeholder="(11) 99999-0000"
+                    value={maskPhone(editForm.phone)}
+                    onChange={(e) => setEditForm((p) => p && ({ ...p, phone: e.target.value.replace(/\D/g, '') }))}
+                    placeholder="(11) 99999-9999"
+                    maxLength={15}
                   />
                 </div>
               </div>
@@ -854,9 +850,10 @@ export function FornecedorDetalhe() {
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-foreground">Telefone</label>
               <Input
-                value={contactForm.phone}
-                onChange={(e) => setContactForm((p) => ({ ...p, phone: e.target.value }))}
-                placeholder="(11) 99999-0000"
+                value={maskPhone(contactForm.phone)}
+                onChange={(e) => setContactForm((p) => ({ ...p, phone: e.target.value.replace(/\D/g, '') }))}
+                placeholder="(11) 99999-9999"
+                maxLength={15}
               />
             </div>
             {contactError && (

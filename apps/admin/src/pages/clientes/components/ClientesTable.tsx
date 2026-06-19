@@ -3,6 +3,7 @@ import { Eye, UserX, Shield } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { maskPhone } from '@/lib/formatters'
 import { type ClienteMock } from '@/data/clientes.mock'
 
 function formatBRL(centavos: number) {
@@ -77,7 +78,7 @@ export function ClientesTable({ clientes, page, limit, total, onPageChange }: Cl
                 {/* Contato */}
                 <td className="px-4 py-3">
                   <p className="text-foreground">{c.email}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">{c.telefonePrincipal}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{c.telefonePrincipal ? maskPhone(c.telefonePrincipal) : ''}</p>
                 </td>
 
                 {/* Cidade/UF */}
