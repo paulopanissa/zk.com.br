@@ -13,6 +13,8 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { api } from '@/lib/api'
+import { maskCep } from '@/lib/formatters'
+import { useCepLookup } from '@/hooks/useCepLookup'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -109,6 +111,7 @@ export function UnidadesPage() {
   const [form, setForm] = useState<FormState>(buildInitialForm())
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
+  const { lookup: cepLookup, loading: cepLoading, notFound: cepNotFound } = useCepLookup()
 
   const load = useCallback(() => {
     setLoading(true)
@@ -464,14 +467,28 @@ export function UnidadesPage() {
               <div className="grid grid-cols-3 gap-3">
                 <div className="col-span-2 space-y-1.5">
                   <label htmlFor="unit-cep" className="text-sm font-medium text-foreground">
-                    CEP
+                    CEP{cepLoading && <span className="ml-1 text-xs font-normal text-muted-foreground">buscando…</span>}
+                    {cepNotFound && <span className="ml-1 text-xs font-normal text-destructive">não encontrado</span>}
                   </label>
                   <Input
                     id="unit-cep"
-                    value={form.cep}
-                    onChange={(e) => patch({ cep: stripDigits(e.target.value).slice(0, 8) })}
-                    placeholder="00000000"
-                    maxLength={8}
+                    value={maskCep(form.cep)}
+                    placeholder="00000-000"
+                    maxLength={9}
+                    onChange={async (e) => {
+                      const d = stripDigits(e.target.value).slice(0, 8)
+                      patch({ cep: d })
+                      if (d.length === 8) {
+                        const r = await cepLookup(d)
+                        if (r) setForm((f) => ({
+                          ...f,
+                          logradouro: f.logradouro || r.logradouro,
+                          bairro: f.bairro || r.bairro,
+                          municipio: f.municipio || r.localidade,
+                          uf: f.uf || r.uf,
+                        }))
+                      }
+                    }}
                   />
                 </div>
                 <div className="space-y-1.5">

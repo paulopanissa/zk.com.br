@@ -12,7 +12,8 @@ import {
 } from '@/components/ui/sheet'
 import { cn } from '@/lib/utils'
 import { api } from '@/lib/api'
-import { maskPhone } from '@/lib/formatters'
+import { maskCep, maskPhone } from '@/lib/formatters'
+import { useCepLookup } from '@/hooks/useCepLookup'
 import { UnidadesPage } from '@/pages/unidades/UnidadesPage'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -173,6 +174,7 @@ export function EmpresaPage() {
   })
   const [addrSaving, setAddrSaving] = useState(false)
   const [addrError, setAddrError] = useState<string | null>(null)
+  const { lookup: cepLookup, loading: cepLoading, notFound: cepNotFound } = useCepLookup()
 
   // Sheet: Telefone
   const [phoneOpen, setPhoneOpen] = useState(false)
@@ -535,7 +537,7 @@ export function EmpresaPage() {
                       />
                       <Field label="Bairro" value={principalAddress.bairro} />
                       <Field label="Cidade / UF" value={`${principalAddress.municipio}, ${principalAddress.uf}`} />
-                      <Field label="CEP" value={principalAddress.cep} />
+                      <Field label="CEP" value={maskCep(principalAddress.cep)} />
                     </div>
                   ) : (
                     <p className="text-sm text-muted-foreground">Nenhum endereço cadastrado.</p>
@@ -726,9 +728,25 @@ export function EmpresaPage() {
             </div>
             <div className="grid grid-cols-3 gap-3">
               <div className="col-span-2 space-y-1.5">
-                <label htmlFor="addr-cep" className="text-sm font-medium text-foreground">CEP *</label>
-                <Input id="addr-cep" value={addrForm.cep} maxLength={8} placeholder="00000000"
-                  onChange={(e) => setAddrForm((f) => ({ ...f, cep: e.target.value.replace(/\D/g, '').slice(0, 8) }))} />
+                <label htmlFor="addr-cep" className="text-sm font-medium text-foreground">
+                  CEP * {cepLoading && <span className="text-xs text-muted-foreground font-normal">buscando…</span>}
+                  {cepNotFound && <span className="text-xs text-destructive font-normal">CEP não encontrado</span>}
+                </label>
+                <Input id="addr-cep" value={maskCep(addrForm.cep)} maxLength={9} placeholder="00000-000"
+                  onChange={async (e) => {
+                    const d = e.target.value.replace(/\D/g, '').slice(0, 8)
+                    setAddrForm((f) => ({ ...f, cep: d }))
+                    if (d.length === 8) {
+                      const r = await cepLookup(d)
+                      if (r) setAddrForm((f) => ({
+                        ...f,
+                        logradouro: f.logradouro || r.logradouro,
+                        bairro: f.bairro || r.bairro,
+                        municipio: f.municipio || r.localidade,
+                        uf: f.uf || r.uf,
+                      }))
+                    }
+                  }} />
               </div>
               <div className="space-y-1.5">
                 <label htmlFor="addr-uf" className="text-sm font-medium text-foreground">UF *</label>

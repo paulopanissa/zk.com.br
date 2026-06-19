@@ -3,7 +3,7 @@ import { ArrowLeft, Shield, MapPin, ShoppingBag, CheckCircle, XCircle, Clock } f
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { maskPhone } from '@/lib/formatters'
+import { maskCep, maskPhone } from '@/lib/formatters'
 import { CLIENTES_MOCK, CLIENTE_DETALHE_MOCK, type PedidoClienteMock } from '@/data/clientes.mock'
 
 function formatBRL(centavos: number) {
@@ -149,7 +149,7 @@ export function ClienteDetalhe() {
                     {end.logradouro}, {end.numero}{end.complemento ? `, ${end.complemento}` : ''} — {end.bairro}
                   </p>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    {end.cidade}/{end.uf} · CEP {end.cep}
+                    {end.cidade}/{end.uf} · CEP {maskCep(end.cep)}
                   </p>
                 </div>
                 {end.principal && (

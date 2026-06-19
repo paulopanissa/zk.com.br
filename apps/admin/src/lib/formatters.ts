@@ -1,3 +1,9 @@
+export function maskCep(raw: string): string {
+  const d = raw.replace(/\D/g, '').slice(0, 8)
+  if (d.length <= 5) return d
+  return `${d.slice(0, 5)}-${d.slice(5)}`
+}
+
 export function maskPhone(raw: string): string {
   const d = raw.replace(/\D/g, '').slice(0, 11)
   if (!d) return ''
