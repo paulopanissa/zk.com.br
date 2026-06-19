@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   Sheet,
   SheetBody,
@@ -9,7 +9,6 @@ import {
 } from '@/components/ui/sheet'
 import { Input } from '@/components/ui/input'
 import { DatePicker } from '@/components/ui/date-picker'
-import { NumberInput } from '@/components/ui/number-input'
 import {
   Select,
   SelectContent,
@@ -18,9 +17,10 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
-import { type CouponType } from '@/data/cupons.mock'
+import { api } from '@/lib/api'
+import { type Cupom, type CouponType, TIPO_LABEL } from '../types'
 
-interface NovoCupomForm {
+interface CupomForm {
   code: string
   type: CouponType | ''
   valueCentavos: string
@@ -29,9 +29,10 @@ interface NovoCupomForm {
   validFrom: string
   validUntil: string
   description: string
+  active: string
 }
 
-const EMPTY_FORM: NovoCupomForm = {
+const EMPTY_FORM: CupomForm = {
   code: '',
   type: '',
   valueCentavos: '',
@@ -40,80 +41,147 @@ const EMPTY_FORM: NovoCupomForm = {
   validFrom: '',
   validUntil: '',
   description: '',
+  active: 'ativo',
+}
+
+function cupomToForm(c: Cupom): CupomForm {
+  return {
+    code: c.code,
+    type: c.type,
+    valueCentavos: c.value_centavos ? String(c.value_centavos / 100) : '',
+    percentBps: c.percent_bps ? String(c.percent_bps / 100) : '',
+    maxUses: c.max_uses ? String(c.max_uses) : '',
+    validFrom: c.valid_from ?? '',
+    validUntil: c.valid_until ?? '',
+    description: c.description ?? '',
+    active: c.active ? 'ativo' : 'inativo',
+  }
 }
 
 interface NovoCupomModalProps {
   open: boolean
   onClose: () => void
-  onCreate: (form: NovoCupomForm) => void
+  cupom?: Cupom | null
+  onSaved: () => void
 }
 
-export function NovoCupomModal({ open, onClose, onCreate }: NovoCupomModalProps) {
-  const [form, setForm] = useState<NovoCupomForm>(EMPTY_FORM)
-  const [errors, setErrors] = useState<Partial<Record<keyof NovoCupomForm, string>>>({})
+export function NovoCupomModal({ open, onClose, cupom, onSaved }: NovoCupomModalProps) {
+  const isEdit = !!cupom
+  const [form, setForm] = useState<CupomForm>(EMPTY_FORM)
+  const [errors, setErrors] = useState<Partial<Record<keyof CupomForm, string>>>({})
+  const [saving, setSaving] = useState(false)
+  const [apiError, setApiError] = useState<string | null>(null)
 
-  function set<K extends keyof NovoCupomForm>(key: K, value: string) {
+  useEffect(() => {
+    if (!open) return
+    setForm(cupom ? cupomToForm(cupom) : EMPTY_FORM)
+    setErrors({})
+    setApiError(null)
+  }, [open, cupom])
+
+  function set(key: keyof CupomForm, value: string) {
     setForm((prev) => ({ ...prev, [key]: key === 'code' ? value.toUpperCase() : value }))
     if (errors[key]) setErrors((prev) => ({ ...prev, [key]: undefined }))
   }
 
   function validate(): boolean {
-    const e: Partial<Record<keyof NovoCupomForm, string>> = {}
-    if (!form.code.trim()) e.code = 'Obrigatório'
-    if (!form.type) e.type = 'Obrigatório'
+    const e: Partial<Record<keyof CupomForm, string>> = {}
+    if (!isEdit && !form.code.trim()) e.code = 'Obrigatório'
+    if (!isEdit && !form.type) e.type = 'Obrigatório'
     if (form.type === 'PERCENTUAL' && !form.percentBps) e.percentBps = 'Informe o percentual'
     if (form.type === 'FIXO' && !form.valueCentavos) e.valueCentavos = 'Informe o valor'
     setErrors(e)
     return Object.keys(e).length === 0
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!validate()) return
-    onCreate(form)
-    setForm(EMPTY_FORM)
-    setErrors({})
-    onClose()
-  }
-
-  function handleClose() {
-    setForm(EMPTY_FORM)
-    setErrors({})
-    onClose()
+    setSaving(true)
+    setApiError(null)
+    try {
+      if (isEdit) {
+        const payload: Record<string, unknown> = {
+          description: form.description.trim() || null,
+          active: form.active === 'ativo',
+          valid_from: form.validFrom || null,
+          valid_until: form.validUntil || null,
+        }
+        if (form.maxUses) payload.max_uses = parseInt(form.maxUses, 10)
+        if (form.type === 'PERCENTUAL' && form.percentBps) {
+          payload.percent_bps = Math.round(parseFloat(form.percentBps) * 100)
+        }
+        if (form.type === 'FIXO' && form.valueCentavos) {
+          payload.value_centavos = Math.round(parseFloat(form.valueCentavos) * 100)
+        }
+        await api.patch(`/cupons/${cupom!.id}`, payload)
+      } else {
+        const payload: Record<string, unknown> = {
+          code: form.code.trim(),
+          type: form.type,
+        }
+        if (form.description.trim()) payload.description = form.description.trim()
+        if (form.validFrom) payload.valid_from = form.validFrom
+        if (form.validUntil) payload.valid_until = form.validUntil
+        if (form.maxUses) payload.max_uses = parseInt(form.maxUses, 10)
+        if (form.type === 'PERCENTUAL') {
+          payload.percent_bps = Math.round(parseFloat(form.percentBps) * 100)
+        }
+        if (form.type === 'FIXO') {
+          payload.value_centavos = Math.round(parseFloat(form.valueCentavos) * 100)
+        }
+        await api.post('/cupons', payload)
+      }
+      onSaved()
+      onClose()
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message
+      setApiError(Array.isArray(msg) ? msg.join(', ') : (msg ?? 'Não foi possível salvar. Verifique os dados e tente novamente.'))
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
-    <Sheet open={open} onOpenChange={(v) => !v && handleClose()}>
+    <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
       <SheetContent>
         <SheetHeader>
-          <SheetTitle className="font-display">Novo cupom</SheetTitle>
+          <SheetTitle className="font-display">{isEdit ? 'Editar cupom' : 'Novo cupom'}</SheetTitle>
         </SheetHeader>
 
-        <form id="novo-cupom-form" onSubmit={handleSubmit}>
+        <form id="cupom-form" onSubmit={handleSubmit}>
           <SheetBody className="space-y-5">
             {/* Código */}
             <Field label="Código *" error={errors.code}>
-              <Input
-                placeholder="EX: BEMVINDO10"
-                value={form.code}
-                onChange={(e) => set('code', e.target.value)}
-                className="font-mono uppercase"
-                autoFocus
-              />
+              {isEdit ? (
+                <p className="font-mono text-sm font-semibold text-foreground py-2">{form.code}</p>
+              ) : (
+                <Input
+                  placeholder="EX: BEMVINDO10"
+                  value={form.code}
+                  onChange={(e) => set('code', e.target.value)}
+                  className="font-mono uppercase"
+                  autoFocus
+                />
+              )}
             </Field>
 
             {/* Tipo */}
             <Field label="Tipo *" error={errors.type}>
-              <Select value={form.type} onValueChange={(v) => set('type', v)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione o tipo" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="PERCENTUAL">Percentual (%)</SelectItem>
-                  <SelectItem value="FIXO">Valor fixo (R$)</SelectItem>
-                  <SelectItem value="FRETE_GRATIS">Frete grátis</SelectItem>
-                </SelectContent>
-              </Select>
+              {isEdit ? (
+                <p className="text-sm text-foreground py-2">{TIPO_LABEL[form.type as CouponType]}</p>
+              ) : (
+                <Select value={form.type} onValueChange={(v) => set('type', v)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione o tipo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="PERCENTUAL">Percentual (%)</SelectItem>
+                    <SelectItem value="FIXO">Valor fixo (R$)</SelectItem>
+                    <SelectItem value="FRETE_GRATIS">Frete grátis</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
             </Field>
 
             {/* Desconto condicional */}
@@ -121,8 +189,9 @@ export function NovoCupomModal({ open, onClose, onCreate }: NovoCupomModalProps)
               <Field label="Percentual * (ex: 10 = 10%)" error={errors.percentBps}>
                 <Input
                   type="number"
-                  min={1}
+                  min={0.01}
                   max={100}
+                  step={0.01}
                   placeholder="10"
                   value={form.percentBps}
                   onChange={(e) => set('percentBps', e.target.value)}
@@ -143,12 +212,13 @@ export function NovoCupomModal({ open, onClose, onCreate }: NovoCupomModalProps)
             )}
 
             {/* Uso máximo */}
-            <Field label="Uso máximo (0 = ilimitado)">
-              <NumberInput
-                value={form.maxUses || '0'}
-                min={0}
-                placeholder="0"
-                onValueChange={(v) => set('maxUses', isNaN(v) ? '0' : String(v))}
+            <Field label="Uso máximo (vazio = ilimitado)">
+              <Input
+                type="number"
+                min={1}
+                placeholder="ilimitado"
+                value={form.maxUses}
+                onChange={(e) => set('maxUses', e.target.value)}
               />
             </Field>
 
@@ -180,15 +250,32 @@ export function NovoCupomModal({ open, onClose, onCreate }: NovoCupomModalProps)
                 onChange={(e) => set('description', e.target.value)}
               />
             </Field>
+
+            {/* Status — apenas em edição */}
+            {isEdit && (
+              <Field label="Status">
+                <Select value={form.active} onValueChange={(v) => set('active', v)}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ativo">Ativo</SelectItem>
+                    <SelectItem value="inativo">Inativo</SelectItem>
+                  </SelectContent>
+                </Select>
+              </Field>
+            )}
+
+            {apiError && <p className="text-sm text-destructive">{apiError}</p>}
           </SheetBody>
         </form>
 
         <SheetFooter>
-          <Button type="button" variant="outline" onClick={handleClose}>
+          <Button type="button" variant="outline" onClick={onClose} disabled={saving}>
             Cancelar
           </Button>
-          <Button type="submit" form="novo-cupom-form">
-            Criar cupom
+          <Button type="submit" form="cupom-form" disabled={saving}>
+            {saving ? 'Salvando…' : isEdit ? 'Salvar alterações' : 'Criar cupom'}
           </Button>
         </SheetFooter>
       </SheetContent>
