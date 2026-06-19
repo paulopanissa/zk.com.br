@@ -12,8 +12,10 @@ import {
   Link2,
   PackagePlus,
   Paperclip,
+  RefreshCw,
   XCircle,
 } from 'lucide-react'
+import { ProgressRoot, ProgressTrack, ProgressRange } from '@ark-ui/react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -166,6 +168,7 @@ export function NotaEntradaDetalhe() {
   // PDF attach
   const pdfInputRef = useRef<HTMLInputElement>(null)
   const [attachingPdf, setAttachingPdf] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null)
 
   // Item link sheet
   const [itemSheet, setItemSheet] = useState<{ item: NfEntradaItem } | null>(null)
@@ -289,12 +292,16 @@ export function NotaEntradaDetalhe() {
     if (!file) return
     e.target.value = ''
     setAttachingPdf(true)
+    setUploadProgress(0)
     setActionError(null)
     const formData = new FormData()
     formData.append('pdf', file)
     try {
       await api.post(`/nf-entrada/${id}/attach-pdf`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
+        onUploadProgress: (evt) => {
+          if (evt.total) setUploadProgress(Math.round((evt.loaded * 100) / evt.total))
+        },
       })
       load()
     } catch (e) {
@@ -302,6 +309,7 @@ export function NotaEntradaDetalhe() {
       setActionError(msg || 'Erro ao anexar PDF.')
     } finally {
       setAttachingPdf(false)
+      setUploadProgress(null)
     }
   }
 
@@ -499,17 +507,63 @@ export function NotaEntradaDetalhe() {
 
             {/* Action buttons */}
             <div className="flex items-center gap-2 flex-wrap shrink-0 mt-1">
-              {isRascunho && (
+              {/* PDF upload progress bar (during upload) */}
+              {attachingPdf && (
+                <div className="flex items-center gap-2 min-w-[160px]">
+                  <FileText className="h-3.5 w-3.5 text-brand-cream/60 shrink-0" />
+                  <div className="flex-1">
+                    <p className="text-xs text-brand-cream/60 mb-1">
+                      Enviando PDF{uploadProgress !== null ? ` ${uploadProgress}%` : '…'}
+                    </p>
+                    <ProgressRoot
+                      value={uploadProgress}
+                      max={100}
+                      className="h-1 w-full"
+                    >
+                      <ProgressTrack className="h-1 rounded-full bg-white/15 overflow-hidden">
+                        <ProgressRange
+                          className="h-full rounded-full bg-brand-sage transition-all duration-150"
+                          style={{ width: `${uploadProgress ?? 0}%` }}
+                        />
+                      </ProgressTrack>
+                    </ProgressRoot>
+                  </div>
+                </div>
+              )}
+
+              {/* Ver PDF — shown whenever pdf_url exists and not uploading */}
+              {!attachingPdf && nf.pdf_url && (
+                <a
+                  href={nf.pdf_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium text-brand-cream/70 hover:text-brand-cream hover:bg-white/10 border border-white/20 transition-colors"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  Ver PDF
+                </a>
+              )}
+
+              {isRascunho && !attachingPdf && (
                 <>
+                  {/* Substituir/Anexar PDF */}
                   <Button
                     size="sm"
                     variant="ghost"
                     className="gap-1.5 text-brand-cream/70 hover:text-brand-cream hover:bg-white/10 border border-white/20"
                     onClick={() => pdfInputRef.current?.click()}
-                    disabled={attachingPdf}
                   >
-                    <Paperclip className="h-3.5 w-3.5" />
-                    {attachingPdf ? 'Anexando…' : 'Anexar PDF'}
+                    {nf.pdf_url ? (
+                      <>
+                        <RefreshCw className="h-3.5 w-3.5" />
+                        Substituir PDF
+                      </>
+                    ) : (
+                      <>
+                        <Paperclip className="h-3.5 w-3.5" />
+                        Anexar PDF
+                      </>
+                    )}
                   </Button>
                   <Button
                     size="sm"
@@ -531,17 +585,6 @@ export function NotaEntradaDetalhe() {
                     {confirming ? 'Confirmando…' : 'Confirmar NF'}
                   </Button>
                 </>
-              )}
-              {nf.status === 'CONFIRMADA' && nf.pdf_url && (
-                <a
-                  href={nf.pdf_url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium text-brand-cream/70 hover:text-brand-cream hover:bg-white/10 border border-white/20 transition-colors"
-                >
-                  <ExternalLink className="h-3.5 w-3.5" />
-                  Ver PDF
-                </a>
               )}
             </div>
           </div>
