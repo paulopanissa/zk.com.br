@@ -21,7 +21,8 @@ interface BrandPage {
 
 export function ProdutosPage() {
   const [filtros, setFiltros] = useState<ProdutosFiltros>({
-    busca: '',
+    buscaNome: '',
+    buscaSku: '',
     categoria: 'all',
     marca: 'all',
     somenteAtivos: false,
@@ -50,7 +51,13 @@ export function ProdutosPage() {
     setError(false)
     try {
       const params: Record<string, string | number | boolean> = { page, limit: LIMIT }
-      if (filtros.busca) params.name = filtros.busca
+      if (filtros.buscaNome.trim()) params.name = filtros.buscaNome.trim()
+      if (filtros.buscaSku.trim()) {
+        const sku = filtros.buscaSku.trim()
+        // All-digits 8+ chars = barcode (EAN-8 / EAN-13 / UPC); otherwise = SKU
+        if (/^\d{8,}$/.test(sku)) params.barcode = sku
+        else params.sku = sku
+      }
       if (filtros.categoria !== 'all') params.category_id = filtros.categoria
       if (filtros.marca !== 'all') params.brand_id = filtros.marca
       if (filtros.somenteAtivos) params.active = true
