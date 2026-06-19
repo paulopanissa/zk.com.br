@@ -10,7 +10,7 @@ import { CreateLotDto } from './dto/create-lot.dto';
 import { QueryExpiringDto } from './dto/query-expiring.dto';
 import { QueryLotsDto } from './dto/query-lots.dto';
 import { UpdateLotDto } from './dto/update-lot.dto';
-import { LotRecord, LotsRepository } from './lots.repository';
+import { LotRecord, LotWithProduct, LotsRepository } from './lots.repository';
 
 @Injectable()
 export class LotsService {
