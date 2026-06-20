@@ -99,8 +99,10 @@ export function CentroCustoPage() {
   const [formError, setFormError] = useState('')
 
   const [togglingId, setTogglingId] = useState<string | null>(null)
+  const [toggleError, setToggleError] = useState<string | null>(null)
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   const [items, setItems] = useState<CostItem[]>([])
   const [summary, setSummary] = useState<CenterSummary | null>(null)
@@ -203,14 +205,14 @@ export function CentroCustoPage() {
       if (sheet?.mode === 'create') {
         await api.post('/cost-centers', {
           nome: formNome.trim(),
-          descricao: formDescricao.trim() || undefined,
+          descricao: formDescricao.trim() || null,
         })
         closeSheet()
         loadCenters()
       } else if (sheet?.mode === 'edit') {
         await api.patch(`/cost-centers/${sheet.center.id}`, {
           nome: formNome.trim(),
-          descricao: formDescricao.trim() || undefined,
+          descricao: formDescricao.trim() || null,
         })
         setCenters((prev) =>
           prev.map((c) =>
@@ -232,13 +234,14 @@ export function CentroCustoPage() {
   async function toggleCenter(center: CostCenter) {
     if (togglingId) return
     setTogglingId(center.id)
+    setToggleError(null)
     try {
       await api.patch(`/cost-centers/${center.id}`, { ativo: !center.ativo })
       setCenters((prev) =>
         prev.map((c) => (c.id === center.id ? { ...c, ativo: !c.ativo } : c)),
       )
     } catch {
-      // silent
+      setToggleError('Erro ao alterar status')
     } finally {
       setTogglingId(null)
     }
@@ -248,6 +251,7 @@ export function CentroCustoPage() {
 
   async function deleteCenter(id: string) {
     setDeletingId(id)
+    setDeleteError(null)
     try {
       await api.delete(`/cost-centers/${id}`)
       setCenters((prev) => prev.filter((c) => c.id !== id))
@@ -255,7 +259,8 @@ export function CentroCustoPage() {
       setDeleteConfirmId(null)
       if (sheet?.mode === 'edit' && sheet.center.id === id) closeSheet()
     } catch {
-      // silent
+      setDeleteError('Erro ao excluir centro de custo')
+      setDeleteConfirmId(null)
     } finally {
       setDeletingId(null)
     }
@@ -296,8 +301,8 @@ export function CentroCustoPage() {
       setItemFormError('Nome é obrigatório')
       return
     }
-    const valor = parseFloat(itemForm.valor) || 0
-    if (valor <= 0) {
+    const valorNum = Number(itemForm.valor.replace(',', '.'))
+    if (isNaN(valorNum) || valorNum <= 0) {
       setItemFormError('Valor deve ser maior que zero')
       return
     }
@@ -305,14 +310,14 @@ export function CentroCustoPage() {
     const payload: Record<string, unknown> = {
       nome: itemForm.nome.trim(),
       tipo: itemForm.tipo,
-      descricao: itemForm.descricao.trim() || undefined,
+      descricao: itemForm.descricao.trim() || null,
     }
 
     if (itemForm.tipo === 'FIXO') {
-      payload.valor_centavos = Math.round(valor * 100)
+      payload.valor_centavos = Math.round(valorNum * 100)
       payload.percentual_bps = null
     } else {
-      payload.percentual_bps = Math.round(valor * 100)
+      payload.percentual_bps = Math.round(valorNum * 100)
       payload.valor_centavos = null
     }
 
@@ -345,13 +350,14 @@ export function CentroCustoPage() {
     if (sheet?.mode !== 'edit') return
     const centerId = sheet.center.id
     setDeletingItemId(item.id)
+    setItemsError('')
     try {
       await api.delete(`/cost-centers/${centerId}/items/${item.id}`)
       setItems((prev) => prev.filter((i) => i.id !== item.id))
       const { data: sum } = await api.get<CenterSummary>(`/cost-centers/${centerId}/summary`)
       setSummary(sum)
     } catch {
-      // silent
+      setItemsError('Erro ao excluir item')
     } finally {
       setDeletingItemId(null)
     }
@@ -379,9 +385,9 @@ export function CentroCustoPage() {
       </div>
 
       {/* List error */}
-      {listError && (
+      {(listError ?? toggleError ?? deleteError) && (
         <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-          {listError}
+          {listError ?? toggleError ?? deleteError}
         </div>
       )}
 
