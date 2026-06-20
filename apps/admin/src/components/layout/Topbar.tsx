@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Bell, ChevronDown, LogOut, Search, Settings, Store, X } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { cn } from '@/lib/utils'
@@ -11,6 +11,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { OmnisearchOverlay } from './OmnisearchOverlay'
 
 const NOTIFICATION_COUNT = 0 // TODO: integrar endpoint de notificações
 // TODO: carregar lista de unidades do contexto de auth quando disponível
@@ -30,19 +31,31 @@ export function Topbar({ breadcrumbs, className }: TopbarProps) {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
   const [query, setQuery] = useState('')
+  const [overlayOpen, setOverlayOpen] = useState(false)
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false)
+
+  const desktopSearchRef = useRef<HTMLFormElement>(null)
+  const mobileSearchRef = useRef<HTMLFormElement>(null)
 
   const userName = user?.name ?? 'Admin'
   const userInitials = userName.slice(0, 2).toUpperCase()
   const userEmail = user?.email ?? ''
   const [activeUnit, setActiveUnit] = useState(STORE_UNITS[0])
 
-  function handleSearchSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    const q = query.trim()
-    if (!q) return
-    navigate(`/?search=${encodeURIComponent(q)}`)
+  function handleQueryChange(value: string) {
+    setQuery(value)
+    if (value.length >= 2) setOverlayOpen(true)
+    else setOverlayOpen(false)
+  }
+
+  function handleClose() {
+    setOverlayOpen(false)
+    setQuery('')
     setMobileSearchOpen(false)
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (e.key === 'Escape') handleClose()
   }
 
   return (
@@ -50,24 +63,36 @@ export function Topbar({ breadcrumbs, className }: TopbarProps) {
       <div className="flex h-14 items-center gap-3 px-4 md:px-6">
 
         {/* Omnisearch — desktop */}
-        <form
-          onSubmit={handleSearchSubmit}
-          className="hidden md:flex flex-1 items-center gap-2 rounded-xl border border-border bg-background px-3 py-2 text-sm text-muted-foreground focus-within:border-brand-orange focus-within:ring-1 focus-within:ring-brand-orange transition-colors"
-        >
-          <Search className="h-4 w-4 shrink-0" />
-          <input
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Buscar produtos, clientes, pedidos..."
-            className="w-full bg-transparent outline-none placeholder:text-muted-foreground"
-          />
-          {query && (
-            <button type="button" onClick={() => setQuery('')} className="shrink-0">
-              <X className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
-            </button>
+        <div className="hidden md:block relative flex-1">
+          <form
+            ref={desktopSearchRef}
+            className="flex items-center gap-2 rounded-xl border border-border bg-background px-3 py-2 text-sm text-muted-foreground focus-within:border-brand-orange focus-within:ring-1 focus-within:ring-brand-orange transition-colors"
+          >
+            <Search className="h-4 w-4 shrink-0" />
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => handleQueryChange(e.target.value)}
+              onFocus={() => { if (query.length >= 2) setOverlayOpen(true) }}
+              onKeyDown={handleKeyDown}
+              placeholder="Buscar produtos, clientes, fornecedores..."
+              className="w-full bg-transparent outline-none placeholder:text-muted-foreground"
+              autoComplete="off"
+            />
+            {query && (
+              <button type="button" onClick={handleClose} className="shrink-0">
+                <X className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
+              </button>
+            )}
+          </form>
+          {overlayOpen && (
+            <OmnisearchOverlay
+              query={query}
+              onClose={handleClose}
+              anchorRef={desktopSearchRef}
+            />
           )}
-        </form>
+        </div>
 
         {/* Mobile search toggle */}
         <button
@@ -193,25 +218,37 @@ export function Topbar({ breadcrumbs, className }: TopbarProps) {
 
       {/* Mobile search bar — expands below topbar */}
       {mobileSearchOpen && (
-        <form
-          onSubmit={handleSearchSubmit}
-          className="md:hidden flex items-center gap-2 border-t border-border bg-background px-4 py-2"
-        >
-          <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
-          <input
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Buscar produtos, clientes, pedidos..."
-            autoFocus
-            className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-          />
-          {query && (
-            <button type="button" onClick={() => setQuery('')}>
-              <X className="h-3.5 w-3.5 text-muted-foreground" />
-            </button>
+        <div className="md:hidden relative">
+          <form
+            ref={mobileSearchRef}
+            className="flex items-center gap-2 border-t border-border bg-background px-4 py-2"
+          >
+            <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => handleQueryChange(e.target.value)}
+              onFocus={() => { if (query.length >= 2) setOverlayOpen(true) }}
+              onKeyDown={handleKeyDown}
+              placeholder="Buscar produtos, clientes, fornecedores..."
+              autoFocus
+              autoComplete="off"
+              className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+            />
+            {query && (
+              <button type="button" onClick={handleClose}>
+                <X className="h-3.5 w-3.5 text-muted-foreground" />
+              </button>
+            )}
+          </form>
+          {overlayOpen && (
+            <OmnisearchOverlay
+              query={query}
+              onClose={handleClose}
+              anchorRef={mobileSearchRef}
+            />
           )}
-        </form>
+        </div>
       )}
     </header>
   )
