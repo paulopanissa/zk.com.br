@@ -9,6 +9,7 @@ import { QueryVendasDto } from './dto/query-vendas.dto';
 import {
   RelatoriosRepository,
   ProdutoVolumeRow,
+  VendasDiaRow,
 } from './relatorios.repository';
 
 // ─── Tipos de retorno ─────────────────────────────────────────────────────────
@@ -88,6 +89,42 @@ export interface RelatorioProdutosResult {
   ordem: 'margem' | 'volume';
   melhores: ProdutoRanking[];
   piores: ProdutoRanking[];
+}
+
+export interface DashboardKpi {
+  total_centavos: number;
+  total_pedidos: number;
+  ticket_medio_centavos: number;
+}
+
+export interface DashboardSerieDia {
+  data: string;
+  total_centavos: number;
+  total_pedidos: number;
+}
+
+export interface DashboardTopProduto {
+  id: string;
+  name: string;
+  sku: string | null;
+  unidades_vendidas: number;
+  receita_centavos: number;
+}
+
+export interface DashboardAlerta {
+  id: string;
+  tipo: string;
+  mensagem: string;
+  criado_em: string;
+}
+
+export interface DashboardResult {
+  hoje: DashboardKpi;
+  ontem: DashboardKpi;
+  serie_7_dias: DashboardSerieDia[];
+  top_produtos: DashboardTopProduto[];
+  estoque_critico_count: number;
+  alertas: DashboardAlerta[];
 }
 
 // ─── Raw query row types ──────────────────────────────────────────────────────
@@ -353,6 +390,67 @@ export class RelatoriosService {
       ordem,
       melhores: melhoresRows.map(mapProduto),
       piores: pioresRows.map(mapProduto),
+    };
+  }
+
+  // ── Dashboard ─────────────────────────────────────────────────────────────────
+
+  async getDashboard(user: JwtSystemPayload): Promise<DashboardResult> {
+    const unitId = await this.tenancy.resolveUnitId(user);
+
+    const now = new Date();
+    const startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6, 0, 0, 0, 0);
+    const hojeInicio = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+    const hojeFim = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+
+    const [serie, topProdutos, estoqueCriticoRows, alertasRows] = await Promise.all([
+      this.repository.queryVendasSerieDiaria(unitId, startDate),
+      this.repository.queryTopProdutosVendas(unitId, hojeInicio, hojeFim, 5),
+      this.repository.queryEstoqueCriticoCount(unitId, 5),
+      this.repository.queryAlertasRecentes(unitId, 5),
+    ]);
+
+    const makeKpi = (row: VendasDiaRow | null | undefined): DashboardKpi => {
+      const total = row ? this.toBigIntNumber(row.total_centavos) : 0;
+      const pedidos = row ? this.toBigIntNumber(row.total_pedidos) : 0;
+      return {
+        total_centavos: total,
+        total_pedidos: pedidos,
+        ticket_medio_centavos: pedidos > 0 ? Math.round(total / pedidos) : 0,
+      };
+    };
+
+    const toIsoDate = (val: Date | unknown): string => {
+      const d = val instanceof Date ? val : new Date(String(val));
+      return d.toISOString().split('T')[0];
+    };
+
+    return {
+      hoje: makeKpi(serie[serie.length - 1]),
+      ontem: makeKpi(serie[serie.length - 2]),
+      serie_7_dias: serie.map((r) => ({
+        data: toIsoDate(r.data),
+        total_centavos: this.toBigIntNumber(r.total_centavos),
+        total_pedidos: this.toBigIntNumber(r.total_pedidos),
+      })),
+      top_produtos: topProdutos.map((r) => ({
+        id: r.id,
+        name: r.name,
+        sku: r.sku,
+        unidades_vendidas: this.toInt(r.unidades_vendidas),
+        receita_centavos: this.toBigIntNumber(r.receita_centavos),
+      })),
+      estoque_critico_count: this.toBigIntNumber(
+        estoqueCriticoRows[0]?.count ?? BigInt(0),
+      ),
+      alertas: alertasRows.map((r) => ({
+        id: r.id,
+        tipo: r.type,
+        mensagem: r.message,
+        criado_em: r.created_at instanceof Date
+          ? r.created_at.toISOString()
+          : String(r.created_at),
+      })),
     };
   }
 }

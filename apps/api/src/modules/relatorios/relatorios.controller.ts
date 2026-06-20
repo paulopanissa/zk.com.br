@@ -16,6 +16,17 @@ import { RelatoriosService } from './relatorios.service';
 export class RelatoriosController {
   constructor(private readonly service: RelatoriosService) {}
 
+  @Get('dashboard')
+  @Roles(SystemRole.ADMINISTRADOR)
+  @ApiOperation({
+    summary: 'Dados consolidados do dashboard',
+    description:
+      'Retorna KPIs de hoje e ontem, série diária dos últimos 7 dias, top produtos do dia, contagem de estoque crítico e alertas recentes. Escopo: unidade do usuário autenticado.',
+  })
+  getDashboard(@CurrentUser() user: JwtSystemPayload) {
+    return this.service.getDashboard(user);
+  }
+
   @Get('vendas')
   @Roles(SystemRole.ADMINISTRADOR)
   @ApiOperation({

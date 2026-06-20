@@ -67,6 +67,23 @@ export interface ProdutoVolumeRow {
   preco_medio_centavos: Prisma.Decimal;
 }
 
+export interface VendasDiaRow {
+  data: Date;
+  total_centavos: bigint;
+  total_pedidos: bigint;
+}
+
+export interface EstoqueCriticoCountRow {
+  count: bigint;
+}
+
+export interface AlertaRecenteRow {
+  id: string;
+  type: string;
+  message: string;
+  created_at: Date;
+}
+
 @Injectable()
 export class RelatoriosRepository {
   constructor(private readonly prisma: PrismaService) {}
@@ -358,6 +375,51 @@ export class RelatoriosRepository {
       ORDER BY ROUND((AVG(vi.preco_unitario_centavos) - pp.cost_price_cents::numeric)
                      / NULLIF(AVG(vi.preco_unitario_centavos), 0) * 10000) ASC
       LIMIT ${top}
+    `;
+  }
+
+  // ── Dashboard ─────────────────────────────────────────────────────────────────
+
+  queryVendasSerieDiaria(unitId: string, startDate: Date): Promise<VendasDiaRow[]> {
+    return this.prisma.$queryRaw<VendasDiaRow[]>`
+      SELECT
+        d.day::date                                   AS data,
+        COALESCE(SUM(vi.total_centavos), 0)::bigint   AS total_centavos,
+        COUNT(DISTINCT v.id)::bigint                  AS total_pedidos
+      FROM generate_series(${startDate}::date, CURRENT_DATE::date, '1 day'::interval) AS d(day)
+      LEFT JOIN vendas v
+        ON DATE(v.created_at) = d.day::date
+        AND v.unidade_id = ${unitId}
+        AND v.status = 'FINALIZADA'
+      LEFT JOIN venda_items vi ON vi.venda_id = v.id
+      GROUP BY d.day
+      ORDER BY d.day ASC
+    `;
+  }
+
+  queryEstoqueCriticoCount(unitId: string, threshold: number): Promise<EstoqueCriticoCountRow[]> {
+    return this.prisma.$queryRaw<EstoqueCriticoCountRow[]>`
+      SELECT COUNT(*)::bigint AS count
+      FROM (
+        SELECT p.id
+        FROM products p
+        LEFT JOIN stock_movements sm ON sm.product_id = p.id AND sm.unidade_id = ${unitId}
+        WHERE p.unidade_id = ${unitId}
+          AND p.active = true
+        GROUP BY p.id
+        HAVING COALESCE(SUM(sm.quantity), 0) > 0
+          AND COALESCE(SUM(sm.quantity), 0) <= ${threshold}
+      ) sub
+    `;
+  }
+
+  queryAlertasRecentes(unitId: string, limit: number): Promise<AlertaRecenteRow[]> {
+    return this.prisma.$queryRaw<AlertaRecenteRow[]>`
+      SELECT id, type, message, created_at
+      FROM alert_events
+      WHERE unidade_id = ${unitId}
+      ORDER BY created_at DESC
+      LIMIT ${limit}
     `;
   }
 
