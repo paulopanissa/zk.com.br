@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Bookmark, FolderTree, Package, Truck, Users } from 'lucide-react'
+import axios from 'axios'
 import { api } from '@/lib/api'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
 interface ProductResult { id: string; name: string; sku: string | null; active: boolean }
-interface CustomerResult { id: string; nome: string; email: string | null; ativo: boolean }
+interface CustomerResult { id: string; nome: string; ativo: boolean }
 interface SupplierResult { id: string; razao_social: string; nome_fantasia: string | null; active: boolean }
 interface CategoryResult { id: string; name: string; slug: string; active: boolean }
 interface BrandResult { id: string; name: string; slug: string; active: boolean }
@@ -24,6 +25,7 @@ interface SearchResponse {
 }
 
 interface FlatResult {
+  idx: number
   id: string
   label: string
   sublabel?: string
@@ -54,21 +56,22 @@ function buildHref(type: FlatResult['type'], id: string): string {
 function flattenResults(data: SearchResponse): FlatResult[] {
   const flat: FlatResult[] = []
   const { results } = data
+  let i = 0
 
   results.products?.forEach((p) =>
-    flat.push({ id: p.id, label: p.name, sublabel: p.sku ?? undefined, type: 'products', href: buildHref('products', p.id) })
+    flat.push({ idx: i++, id: p.id, label: p.name, sublabel: p.sku ?? undefined, type: 'products', href: buildHref('products', p.id) })
   )
   results.customers?.forEach((c) =>
-    flat.push({ id: c.id, label: c.nome, sublabel: c.email ?? undefined, type: 'customers', href: buildHref('customers', c.id) })
+    flat.push({ idx: i++, id: c.id, label: c.nome, type: 'customers', href: buildHref('customers', c.id) })
   )
   results.suppliers?.forEach((s) =>
-    flat.push({ id: s.id, label: s.razao_social, sublabel: s.nome_fantasia ?? undefined, type: 'suppliers', href: buildHref('suppliers', s.id) })
+    flat.push({ idx: i++, id: s.id, label: s.razao_social, sublabel: s.nome_fantasia ?? undefined, type: 'suppliers', href: buildHref('suppliers', s.id) })
   )
   results.categories?.forEach((c) =>
-    flat.push({ id: c.id, label: c.name, type: 'categories', href: buildHref('categories', c.id) })
+    flat.push({ idx: i++, id: c.id, label: c.name, type: 'categories', href: buildHref('categories', c.id) })
   )
   results.brands?.forEach((b) =>
-    flat.push({ id: b.id, label: b.name, type: 'brands', href: buildHref('brands', b.id) })
+    flat.push({ idx: i++, id: b.id, label: b.name, type: 'brands', href: buildHref('brands', b.id) })
   )
   return flat
 }
@@ -86,34 +89,40 @@ export function OmnisearchOverlay({ query, onClose, anchorRef }: OmnisearchOverl
   const overlayRef = useRef<HTMLDivElement>(null)
   const abortRef = useRef<AbortController | null>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const itemRefs = useRef<Map<number, HTMLButtonElement>>(new Map())
 
   const [results, setResults] = useState<FlatResult[]>([])
   const [loading, setLoading] = useState(false)
   const [activeIdx, setActiveIdx] = useState(0)
   const [searched, setSearched] = useState(false)
+  const [fetchError, setFetchError] = useState(false)
 
-  // ── Fetch ────────────────────────────────────────────────────────────────
+  // ── Fetch ─────────────────────────────────────────────────────────────────
 
   const doSearch = useCallback(async (q: string) => {
     if (abortRef.current) abortRef.current.abort()
-    abortRef.current = new AbortController()
+    const controller = new AbortController()
+    abortRef.current = controller
 
     setLoading(true)
+    setFetchError(false)
     setSearched(false)
+
     try {
       const { data } = await api.get<SearchResponse>('/search', {
         params: { q, limit: 5 },
-        signal: abortRef.current.signal,
+        signal: controller.signal,
       })
+      if (controller.signal.aborted) return
       setResults(flattenResults(data))
       setActiveIdx(0)
       setSearched(true)
-    } catch (err: unknown) {
-      if ((err as { name?: string }).name !== 'CanceledError' && (err as { name?: string }).name !== 'AbortError') {
-        setResults([])
-        setSearched(true)
-      }
-    } finally {
+      setLoading(false)
+    } catch (err) {
+      if (controller.signal.aborted || axios.isCancel(err)) return
+      setResults([])
+      setSearched(true)
+      setFetchError(true)
       setLoading(false)
     }
   }, [])
@@ -122,6 +131,7 @@ export function OmnisearchOverlay({ query, onClose, anchorRef }: OmnisearchOverl
     if (query.length < 2) {
       setResults([])
       setSearched(false)
+      setFetchError(false)
       setLoading(false)
       return
     }
@@ -140,7 +150,14 @@ export function OmnisearchOverlay({ query, onClose, anchorRef }: OmnisearchOverl
     }
   }, [])
 
-  // ── Click outside ────────────────────────────────────────────────────────
+  // ── Scroll active item into view ──────────────────────────────────────────
+
+  useEffect(() => {
+    const el = itemRefs.current.get(activeIdx)
+    el?.scrollIntoView({ block: 'nearest' })
+  }, [activeIdx])
+
+  // ── Click outside ─────────────────────────────────────────────────────────
 
   useEffect(() => {
     function handleMouseDown(e: MouseEvent) {
@@ -156,7 +173,7 @@ export function OmnisearchOverlay({ query, onClose, anchorRef }: OmnisearchOverl
     return () => document.removeEventListener('mousedown', handleMouseDown)
   }, [onClose, anchorRef])
 
-  // ── Keyboard navigation ──────────────────────────────────────────────────
+  // ── Keyboard navigation ───────────────────────────────────────────────────
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -184,7 +201,7 @@ export function OmnisearchOverlay({ query, onClose, anchorRef }: OmnisearchOverl
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [results, activeIdx, navigate, onClose])
 
-  // ── Render guard ─────────────────────────────────────────────────────────
+  // ── Render guard ──────────────────────────────────────────────────────────
 
   if (query.length < 2) return null
 
@@ -211,13 +228,20 @@ export function OmnisearchOverlay({ query, onClose, anchorRef }: OmnisearchOverl
         </div>
       )}
 
-      {!loading && searched && results.length === 0 && (
-        <div className="px-4 py-6 text-center text-sm text-muted-foreground">
-          Nenhum resultado para <span className="font-medium text-foreground">"{query}"</span>
+      {!loading && fetchError && (
+        <div className="px-4 py-6 text-center text-sm text-destructive">
+          Erro ao buscar resultados. Tente novamente.
         </div>
       )}
 
-      {!loading && results.length > 0 && (
+      {!loading && !fetchError && searched && results.length === 0 && (
+        <div className="px-4 py-6 text-center text-sm text-muted-foreground">
+          Nenhum resultado para{' '}
+          <span className="font-medium text-foreground">"{query}"</span>
+        </div>
+      )}
+
+      {!loading && !fetchError && results.length > 0 && (
         <div className="py-1 max-h-[480px] overflow-y-auto">
           {typeOrder.map((type) => {
             const group = grouped[type]
@@ -232,14 +256,17 @@ export function OmnisearchOverlay({ query, onClose, anchorRef }: OmnisearchOverl
                   </span>
                 </div>
                 {group.map((item) => {
-                  const globalIdx = results.indexOf(item)
-                  const isActive = globalIdx === activeIdx
+                  const isActive = item.idx === activeIdx
                   return (
                     <button
                       key={item.id}
+                      ref={(el) => {
+                        if (el) itemRefs.current.set(item.idx, el)
+                        else itemRefs.current.delete(item.idx)
+                      }}
                       role="option"
                       aria-selected={isActive}
-                      onMouseEnter={() => setActiveIdx(globalIdx)}
+                      onMouseEnter={() => setActiveIdx(item.idx)}
                       onClick={() => {
                         navigate(item.href)
                         onClose()
