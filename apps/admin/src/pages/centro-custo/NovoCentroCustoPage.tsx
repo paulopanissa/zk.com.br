@@ -35,7 +35,7 @@ export function NovoCentroCustoPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="p-6 space-y-5">
       {/* Back + page title */}
       <div>
         <Button

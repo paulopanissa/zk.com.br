@@ -236,7 +236,7 @@ export function EditarCentroCustoPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="p-6 space-y-5">
       {/* Back + page title */}
       <div>
         <Button
@@ -254,7 +254,7 @@ export function EditarCentroCustoPage() {
         </p>
       </div>
 
-      <div className="max-w-2xl space-y-6">
+      <div className="max-w-2xl space-y-5">
         {/* Center info card */}
         <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
           <div className="flex items-center gap-2 border-b border-border bg-muted/30 px-4 py-3">
