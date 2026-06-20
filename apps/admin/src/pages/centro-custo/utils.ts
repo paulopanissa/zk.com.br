@@ -6,6 +6,10 @@ export interface CostCenter {
   created_at: string
 }
 
+export interface CostCenterWithItems extends CostCenter {
+  items: CostItem[]
+}
+
 export interface CostItem {
   id: string
   cost_center_id: string
@@ -41,6 +45,17 @@ export function fmtBrl(cents: number) {
 
 export function fmtPct(bps: number) {
   return `${(bps / 100).toFixed(2).replace('.', ',')}%`
+}
+
+export function computeSummary(items: CostItem[]): CenterSummary {
+  return {
+    total_fixo_centavos: items
+      .filter((i) => i.ativo && i.tipo === 'FIXO')
+      .reduce((sum, i) => sum + (i.valor_centavos ?? 0), 0),
+    total_variavel_bps: items
+      .filter((i) => i.ativo && i.tipo === 'VARIAVEL')
+      .reduce((sum, i) => sum + (i.percentual_bps ?? 0), 0),
+  }
 }
 
 export function buildItemForm(item?: CostItem): ItemFormState {
