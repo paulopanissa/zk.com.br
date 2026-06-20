@@ -21,6 +21,7 @@ import {
   FormSection,
   ORIGENS,
   PriceInput,
+  PricingCalculator,
   ToggleChip,
 } from './components/ProdutoFormShared'
 
@@ -694,6 +695,12 @@ export function NovoProdutoPage() {
                     )}
                   </div>
                 </div>
+
+                {/* Pricing calculator */}
+                <PricingCalculator
+                  costPriceStr={precificacao.cost_price}
+                  onUseSuggestedPrice={(price) => setP('sale_price', price)}
+                />
 
                 {/* Divider + Actions */}
                 <div className="border-t border-border/60 px-5 py-4 space-y-2.5">
