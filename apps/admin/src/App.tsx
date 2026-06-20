@@ -5,6 +5,8 @@ import { AdminShell } from '@/components/layout/AdminShell'
 import { LoginPage } from '@/pages/login/LoginPage'
 import { DashboardPage } from '@/pages/dashboard/DashboardPage'
 import { ProdutosPage } from '@/pages/produtos/ProdutosPage'
+import { NovoProdutoPage } from '@/pages/produtos/NovoProdutoPage'
+import { EditarProdutoPage } from '@/pages/produtos/EditarProdutoPage'
 import { EmpresaPage } from '@/pages/empresa/EmpresaPage'
 import { ConfiguracoesPage } from '@/pages/configuracoes/ConfiguracoesPage'
 import { ClientesPage } from '@/pages/clientes/ClientesPage'
@@ -37,6 +39,8 @@ function AppRoutes() {
               <Routes>
                 <Route path="/" element={<DashboardPage />} />
                 <Route path="/produtos" element={<ProdutosPage />} />
+                <Route path="/produtos/novo" element={<NovoProdutoPage />} />
+                <Route path="/produtos/:id/editar" element={<EditarProdutoPage />} />
                 <Route path="/empresa" element={<EmpresaPage />} />
                 <Route path="/configuracoes" element={<ConfiguracoesPage />} />
                 <Route path="/clientes" element={<ClientesPage />} />

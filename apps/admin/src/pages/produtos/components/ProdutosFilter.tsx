@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
 export interface ProdutosFiltros {
-  busca: string
+  busca: string       // nome, SKU or barcode — heuristic routing on send
   categoria: string   // category_id or 'all'
   marca: string       // brand_id or 'all'
   somenteAtivos: boolean
@@ -54,11 +54,11 @@ export function ProdutosFilter({
   return (
     <div className="rounded-lg border border-border bg-card p-4 shadow-sm">
       <div className="flex flex-wrap items-center gap-3">
-        {/* Busca */}
+        {/* Busca unificada */}
         <div className="relative min-w-[240px] flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Buscar por nome, SKU ou código de barras"
+            placeholder="Nome, SKU ou código de barras"
             value={filtros.busca}
             onChange={(e) => set('busca', e.target.value)}
             className="pl-9"
