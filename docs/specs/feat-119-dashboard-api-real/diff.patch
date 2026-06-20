@@ -1,0 +1,929 @@
+diff --git a/apps/admin/src/data/dashboard.mock.ts b/apps/admin/src/data/dashboard.mock.ts
+deleted file mode 100644
+index 963c567..0000000
+--- a/apps/admin/src/data/dashboard.mock.ts
++++ /dev/null
+@@ -1,101 +0,0 @@
+-export interface VendasDia {
+-  data: string
+-  label: string
+-  total: number
+-  pedidos: number
+-}
+-
+-export interface ProdutoTop {
+-  id: string
+-  nome: string
+-  sku: string
+-  vendidos: number
+-  receita: number
+-}
+-
+-export interface AlertaDash {
+-  id: string
+-  tipo: 'estoque_critico' | 'caixa_fechado' | 'produto_inativo' | 'meta_atingida'
+-  mensagem: string
+-  criadoEm: string
+-  lido: boolean
+-}
+-
+-export interface StatusCaixa {
+-  aberto: boolean
+-  operador: string
+-  abertoEm: string | null
+-  saldoAbertura: number
+-  totalVendas: number
+-  totalSangrias: number
+-}
+-
+-export const VENDAS_7_DIAS: VendasDia[] = [
+-  { data: '2026-06-11', label: 'Qua', total: 187400, pedidos: 9 },
+-  { data: '2026-06-12', label: 'Qui', total: 241800, pedidos: 13 },
+-  { data: '2026-06-13', label: 'Sex', total: 318500, pedidos: 17 },
+-  { data: '2026-06-14', label: 'Sáb', total: 452300, pedidos: 24 },
+-  { data: '2026-06-15', label: 'Dom', total: 389700, pedidos: 21 },
+-  { data: '2026-06-16', label: 'Seg', total: 214600, pedidos: 11 },
+-  { data: '2026-06-17', label: 'Hoje', total: 178900, pedidos: 8 },
+-]
+-
+-export const HOJE = VENDAS_7_DIAS[6]
+-export const ONTEM = VENDAS_7_DIAS[5]
+-
+-export const TOP_PRODUTOS: ProdutoTop[] = [
+-  { id: '1', nome: 'Mordedor Osso Grande', sku: 'MOR-OSS-GR-001', vendidos: 24, receita: 155760 },
+-  { id: '2', nome: 'Petisco Frango Desidratado', sku: 'PET-FRG-DES-002', vendidos: 19, receita: 66500 },
+-  { id: '3', nome: 'Raiz de Café Premium', sku: 'MOR-RAF-CAF-004', vendidos: 15, receita: 149850 },
+-  { id: '4', nome: 'Jerky de Batata-Doce', sku: 'PET-JRK-BAT-008', vendidos: 12, receita: 47880 },
+-  { id: '5', nome: 'Kit Petiscos Naturais', sku: 'KIT-PET-NAT-005', vendidos: 9, receita: 98910 },
+-]
+-
+-export const ALERTAS_RECENTES: AlertaDash[] = [
+-  {
+-    id: '1',
+-    tipo: 'estoque_critico',
+-    mensagem: 'Corda de Algodão Tripla — estoque em 2 un (mín: 5)',
+-    criadoEm: '2026-06-17T10:23:00',
+-    lido: false,
+-  },
+-  {
+-    id: '2',
+-    tipo: 'estoque_critico',
+-    mensagem: 'Osso Defumado Grande — estoque em 1 un (mín: 10)',
+-    criadoEm: '2026-06-17T09:11:00',
+-    lido: false,
+-  },
+-  {
+-    id: '3',
+-    tipo: 'meta_atingida',
+-    mensagem: 'Meta semanal de vendas atingida: R$ 1.704,50',
+-    criadoEm: '2026-06-16T18:45:00',
+-    lido: true,
+-  },
+-  {
+-    id: '4',
+-    tipo: 'caixa_fechado',
+-    mensagem: 'Caixa PDV fechado — saldo R$ 1.245,00',
+-    criadoEm: '2026-06-16T18:32:00',
+-    lido: true,
+-  },
+-  {
+-    id: '5',
+-    tipo: 'produto_inativo',
+-    mensagem: 'Shampoo de Aveia inativado automaticamente (estoque zerado)',
+-    criadoEm: '2026-06-15T14:07:00',
+-    lido: true,
+-  },
+-]
+-
+-export const STATUS_CAIXA: StatusCaixa = {
+-  aberto: true,
+-  operador: 'Ana Paula',
+-  abertoEm: '2026-06-17T08:30:00',
+-  saldoAbertura: 20000,
+-  totalVendas: 178900,
+-  totalSangrias: 0,
+-}
+-
+-export const ESTOQUE_CRITICO_COUNT = 3
+diff --git a/apps/admin/src/pages/dashboard/DashboardPage.tsx b/apps/admin/src/pages/dashboard/DashboardPage.tsx
+index 0e2617f..c2b7a2e 100644
+--- a/apps/admin/src/pages/dashboard/DashboardPage.tsx
++++ b/apps/admin/src/pages/dashboard/DashboardPage.tsx
+@@ -1,18 +1,36 @@
++import { useCallback, useEffect, useState } from 'react'
+ import { ShoppingCart, Package, TrendingUp, AlertTriangle } from 'lucide-react'
+ import { KpiCard } from './components/KpiCard'
+ import { VendasChart } from './components/VendasChart'
+ import { TopProdutos } from './components/TopProdutos'
+ import { AlertasRecentes } from './components/AlertasRecentes'
+ import { StatusCaixa } from './components/StatusCaixa'
+-import {
+-  HOJE,
+-  ONTEM,
+-  VENDAS_7_DIAS,
+-  TOP_PRODUTOS,
+-  ALERTAS_RECENTES,
+-  STATUS_CAIXA,
+-  ESTOQUE_CRITICO_COUNT,
+-} from '@/data/dashboard.mock'
++import { api } from '@/lib/api'
++
++// ─── Types ─────────────────────────────────────────────────────────────────────
++
++interface DashboardKpi {
++  total_centavos: number
++  total_pedidos: number
++  ticket_medio_centavos: number
++}
++
++export interface DashboardData {
++  hoje: DashboardKpi
++  ontem: DashboardKpi
++  serie_7_dias: Array<{ data: string; total_centavos: number; total_pedidos: number }>
++  top_produtos: Array<{
++    id: string
++    name: string
++    sku: string | null
++    unidades_vendidas: number
++    receita_centavos: number
++  }>
++  estoque_critico_count: number
++  alertas: Array<{ id: string; tipo: string; mensagem: string; criado_em: string }>
++}
++
++// ─── Helpers ────────────────────────────────────────────────────────────────────
+ 
+ function formatBRL(centavos: number) {
+   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
+@@ -25,63 +43,132 @@ function variacao(atual: number, anterior: number) {
+   return ((atual - anterior) / anterior) * 100
+ }
+ 
++// ─── Skeleton ───────────────────────────────────────────────────────────────────
++
++function DashboardSkeleton() {
++  return (
++    <div className="p-6 space-y-6 animate-pulse">
++      <div className="h-9 w-40 rounded-lg bg-muted" />
++      <div className="h-4 w-64 rounded bg-muted" />
++      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
++        {Array.from({ length: 4 }).map((_, i) => (
++          <div key={i} className="rounded-xl border bg-card p-5 h-28" />
++        ))}
++      </div>
++      <div className="grid gap-4 lg:grid-cols-3">
++        <div className="lg:col-span-2 rounded-xl border bg-card p-5 h-56" />
++        <div className="rounded-xl border bg-card p-5 h-56" />
++      </div>
++      <div className="grid gap-4 lg:grid-cols-2">
++        <div className="rounded-xl border bg-card p-5 h-48" />
++        <div className="rounded-xl border bg-card p-5 h-48" />
++      </div>
++    </div>
++  )
++}
++
++// ─── Page ───────────────────────────────────────────────────────────────────────
++
+ export function DashboardPage() {
+-  const varVendas = variacao(HOJE.total, ONTEM.total)
+-  const varPedidos = variacao(HOJE.pedidos, ONTEM.pedidos)
+-  const ticketHoje = HOJE.pedidos > 0 ? HOJE.total / HOJE.pedidos : 0
+-  const ticketOntem = ONTEM.pedidos > 0 ? ONTEM.total / ONTEM.pedidos : 0
+-  const varTicket = variacao(ticketHoje, ticketOntem)
++  const [data, setData] = useState<DashboardData | null>(null)
++  const [loading, setLoading] = useState(true)
++  const [error, setError] = useState<string | null>(null)
++
++  const fetchDashboard = useCallback(async () => {
++    setLoading(true)
++    setError(null)
++    try {
++      const res = await api.get<DashboardData>('/relatorios/dashboard')
++      setData(res.data)
++    } catch {
++      setError('Não foi possível carregar os dados do dashboard.')
++    } finally {
++      setLoading(false)
++    }
++  }, [])
++
++  useEffect(() => {
++    fetchDashboard()
++  }, [fetchDashboard])
++
++  if (loading) return <DashboardSkeleton />
++
++  if (error || !data) {
++    return (
++      <div className="p-6">
++        <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-5 py-4 text-sm text-destructive">
++          {error ?? 'Erro desconhecido.'}
++          <button
++            type="button"
++            onClick={fetchDashboard}
++            className="ml-3 underline hover:no-underline"
++          >
++            Tentar novamente
++          </button>
++        </div>
++      </div>
++    )
++  }
++
++  const varVendas = variacao(data.hoje.total_centavos, data.ontem.total_centavos)
++  const varPedidos = variacao(data.hoje.total_pedidos, data.ontem.total_pedidos)
++  const varTicket = variacao(data.hoje.ticket_medio_centavos, data.ontem.ticket_medio_centavos)
++
++  const dataHoje = new Date().toLocaleDateString('pt-BR', {
++    weekday: 'long',
++    day: 'numeric',
++    month: 'long',
++    year: 'numeric',
++  })
+ 
+   return (
+     <div className="p-6 space-y-6">
+       <div>
+         <h1 className="font-display text-3xl font-bold text-foreground">Dashboard</h1>
+-        <p className="text-sm text-muted-foreground mt-1">
+-          Quarta-feira, 17 de junho de 2026 — Loja Central
+-        </p>
++        <p className="text-sm text-muted-foreground mt-1 capitalize">{dataHoje}</p>
+       </div>
+ 
+       {/* KPIs */}
+       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+         <KpiCard
+           label="Vendas hoje"
+-          value={formatBRL(HOJE.total)}
++          value={formatBRL(data.hoje.total_centavos)}
+           variacao={varVendas}
+           icon={TrendingUp}
+           destaque
+         />
+         <KpiCard
+           label="Pedidos hoje"
+-          value={String(HOJE.pedidos)}
++          value={String(data.hoje.total_pedidos)}
+           variacao={varPedidos}
+           icon={ShoppingCart}
+         />
+         <KpiCard
+           label="Ticket médio"
+-          value={formatBRL(ticketHoje)}
++          value={formatBRL(data.hoje.ticket_medio_centavos)}
+           variacao={varTicket}
+           icon={TrendingUp}
+         />
+         <KpiCard
+           label="Estoque crítico"
+-          value={`${ESTOQUE_CRITICO_COUNT} itens`}
++          value={`${data.estoque_critico_count} itens`}
+           icon={AlertTriangle}
+-          alerta={ESTOQUE_CRITICO_COUNT > 0}
++          alerta={data.estoque_critico_count > 0}
+         />
+       </div>
+ 
+-      {/* Gráfico + Status Caixa */}
++      {/* Gráfico + Resumo do dia */}
+       <div className="grid gap-4 lg:grid-cols-3">
+         <div className="lg:col-span-2">
+-          <VendasChart dados={VENDAS_7_DIAS} />
++          <VendasChart dados={data.serie_7_dias} />
+         </div>
+-        <StatusCaixa status={STATUS_CAIXA} />
++        <StatusCaixa hoje={data.hoje} />
+       </div>
+ 
+       {/* Top produtos + Alertas */}
+       <div className="grid gap-4 lg:grid-cols-2">
+-        <TopProdutos produtos={TOP_PRODUTOS} />
+-        <AlertasRecentes alertas={ALERTAS_RECENTES} />
++        <TopProdutos produtos={data.top_produtos} />
++        <AlertasRecentes alertas={data.alertas} />
+       </div>
+     </div>
+   )
+diff --git a/apps/admin/src/pages/dashboard/components/AlertasRecentes.tsx b/apps/admin/src/pages/dashboard/components/AlertasRecentes.tsx
+index 4cd3a6f..513d706 100644
+--- a/apps/admin/src/pages/dashboard/components/AlertasRecentes.tsx
++++ b/apps/admin/src/pages/dashboard/components/AlertasRecentes.tsx
+@@ -1,19 +1,25 @@
+-import { AlertTriangle, CheckCircle, Package, DollarSign } from 'lucide-react'
++import { Bell, Package, ShoppingCart, Tag, TrendingDown } from 'lucide-react'
+ import { cn } from '@/lib/utils'
+-import { type AlertaDash } from '@/data/dashboard.mock'
+ 
+-const ICONS: Record<AlertaDash['tipo'], React.ElementType> = {
+-  estoque_critico: Package,
+-  caixa_fechado: DollarSign,
+-  produto_inativo: AlertTriangle,
+-  meta_atingida: CheckCircle,
++interface AlertaItem {
++  id: string
++  tipo: string
++  mensagem: string
++  criado_em: string
+ }
+ 
+-const CORES: Record<AlertaDash['tipo'], string> = {
+-  estoque_critico: 'text-warning bg-warning/10',
+-  caixa_fechado: 'text-muted-foreground bg-muted',
+-  produto_inativo: 'text-danger bg-danger/10',
+-  meta_atingida: 'text-success bg-success/10',
++const ICON_MAP: Record<string, React.ElementType> = {
++  ESTOQUE_BAIXO: Package,
++  MARGEM_BAIXA: TrendingDown,
++  VENDA_FINALIZADA: ShoppingCart,
++  CUPOM_ESGOTADO: Tag,
++}
++
++const COR_MAP: Record<string, string> = {
++  ESTOQUE_BAIXO: 'text-warning bg-warning/10',
++  MARGEM_BAIXA: 'text-warning bg-warning/10',
++  VENDA_FINALIZADA: 'text-success bg-success/10',
++  CUPOM_ESGOTADO: 'text-destructive bg-destructive/10',
+ }
+ 
+ function formatHora(iso: string) {
+@@ -26,33 +32,42 @@ function formatHora(iso: string) {
+ }
+ 
+ interface AlertasRecentesProps {
+-  alertas: AlertaDash[]
++  alertas: AlertaItem[]
+ }
+ 
+ export function AlertasRecentes({ alertas }: AlertasRecentesProps) {
+   return (
+     <div className="rounded-xl border bg-card p-5 shadow-sm">
+       <h2 className="font-display text-base font-bold text-foreground mb-4">Alertas recentes</h2>
+-      <div className="space-y-2.5">
+-        {alertas.map((a) => {
+-          const Icon = ICONS[a.tipo]
+-          const cor = CORES[a.tipo]
+-          return (
+-            <div key={a.id} className={cn('flex items-start gap-3', a.lido && 'opacity-60')}>
+-              <div className={cn('mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg', cor)}>
+-                <Icon className="h-3.5 w-3.5" />
+-              </div>
+-              <div className="flex-1 min-w-0">
+-                <p className="text-sm text-foreground leading-snug">{a.mensagem}</p>
+-                <p className="text-xs text-muted-foreground mt-0.5">{formatHora(a.criadoEm)}</p>
++      {alertas.length === 0 ? (
++        <div className="flex flex-col items-center justify-center gap-2 py-6 text-muted-foreground">
++          <Bell className="h-8 w-8 opacity-20" />
++          <p className="text-sm">Nenhum alerta recente</p>
++        </div>
++      ) : (
++        <div className="space-y-2.5">
++          {alertas.map((a) => {
++            const Icon = ICON_MAP[a.tipo] ?? Bell
++            const cor = COR_MAP[a.tipo] ?? 'text-muted-foreground bg-muted'
++            return (
++              <div key={a.id} className="flex items-start gap-3">
++                <div
++                  className={cn(
++                    'mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg',
++                    cor,
++                  )}
++                >
++                  <Icon className="h-3.5 w-3.5" />
++                </div>
++                <div className="flex-1 min-w-0">
++                  <p className="text-sm text-foreground leading-snug">{a.mensagem}</p>
++                  <p className="text-xs text-muted-foreground mt-0.5">{formatHora(a.criado_em)}</p>
++                </div>
+               </div>
+-              {!a.lido && (
+-                <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-primary" />
+-              )}
+-            </div>
+-          )
+-        })}
+-      </div>
++            )
++          })}
++        </div>
++      )}
+     </div>
+   )
+ }
+diff --git a/apps/admin/src/pages/dashboard/components/StatusCaixa.tsx b/apps/admin/src/pages/dashboard/components/StatusCaixa.tsx
+index 995b3c9..3c42c4a 100644
+--- a/apps/admin/src/pages/dashboard/components/StatusCaixa.tsx
++++ b/apps/admin/src/pages/dashboard/components/StatusCaixa.tsx
+@@ -1,6 +1,12 @@
+-import { Monitor } from 'lucide-react'
+-import { cn } from '@/lib/utils'
+-import { type StatusCaixa as StatusCaixaType } from '@/data/dashboard.mock'
++import { ShoppingCart } from 'lucide-react'
++
++interface StatusCaixaProps {
++  hoje: {
++    total_centavos: number
++    total_pedidos: number
++    ticket_medio_centavos: number
++  }
++}
+ 
+ function formatBRL(centavos: number) {
+   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
+@@ -8,86 +14,39 @@ function formatBRL(centavos: number) {
+   )
+ }
+ 
+-function formatHora(iso: string) {
+-  return new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+-}
+-
+-interface StatusCaixaProps {
+-  status: StatusCaixaType
+-}
+-
+-export function StatusCaixa({ status }: StatusCaixaProps) {
++export function StatusCaixa({ hoje }: StatusCaixaProps) {
+   return (
+     <div className="rounded-xl border bg-card p-5 shadow-sm">
+-      <div className="flex items-center justify-between mb-4">
+-        <div className="flex items-center gap-2">
+-          <Monitor className="h-4 w-4 text-muted-foreground" />
+-          <h2 className="font-display text-base font-bold text-foreground">Caixa PDV</h2>
+-        </div>
+-        <span
+-          className={cn(
+-            'flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold',
+-            status.aberto
+-              ? 'bg-success/10 text-success'
+-              : 'bg-muted text-muted-foreground',
+-          )}
+-        >
+-          <span className={cn('h-1.5 w-1.5 rounded-full', status.aberto ? 'bg-success' : 'bg-muted-foreground')} />
+-          {status.aberto ? 'Aberto' : 'Fechado'}
+-        </span>
++      <div className="flex items-center gap-2 mb-5">
++        <ShoppingCart className="h-4 w-4 text-muted-foreground" />
++        <h2 className="font-display text-base font-bold text-foreground">Vendas do dia</h2>
+       </div>
+ 
+-      <div className="space-y-2.5">
+-        {status.aberto && status.abertoEm && (
+-          <Row label="Operador" value={status.operador} />
+-        )}
+-        {status.aberto && status.abertoEm && (
+-          <Row label="Aberto às" value={formatHora(status.abertoEm)} />
+-        )}
+-        <Row label="Saldo abertura" value={formatBRL(status.saldoAbertura)} />
+-        <Row label="Vendas" value={formatBRL(status.totalVendas)} destaque />
+-        {status.totalSangrias > 0 && (
+-          <Row label="Sangrias" value={formatBRL(status.totalSangrias)} alerta />
+-        )}
+-        <div className="pt-2 border-t border-border">
+-          <Row
+-            label="Saldo esperado"
+-            value={formatBRL(status.saldoAbertura + status.totalVendas - status.totalSangrias)}
+-            bold
+-          />
++      <div className="space-y-5">
++        <div>
++          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
++            Total arrecadado
++          </p>
++          <p className="font-display text-3xl font-bold text-success tabular-nums mt-1">
++            {formatBRL(hoje.total_centavos)}
++          </p>
+         </div>
+-      </div>
+-    </div>
+-  )
+-}
+ 
+-function Row({
+-  label,
+-  value,
+-  destaque,
+-  alerta,
+-  bold,
+-}: {
+-  label: string
+-  value: string
+-  destaque?: boolean
+-  alerta?: boolean
+-  bold?: boolean
+-}) {
+-  return (
+-    <div className="flex items-center justify-between">
+-      <span className="text-sm text-muted-foreground">{label}</span>
+-      <span
+-        className={cn(
+-          'text-sm tabular-nums',
+-          bold ? 'font-bold text-foreground' : 'font-medium',
+-          destaque && 'text-success',
+-          alerta && 'text-warning',
+-          !destaque && !alerta && !bold && 'text-foreground',
+-        )}
+-      >
+-        {value}
+-      </span>
++        <div className="grid grid-cols-2 gap-4 border-t border-border pt-4">
++          <div>
++            <p className="text-xs text-muted-foreground">Pedidos</p>
++            <p className="text-xl font-bold text-foreground tabular-nums mt-0.5">
++              {hoje.total_pedidos}
++            </p>
++          </div>
++          <div>
++            <p className="text-xs text-muted-foreground">Ticket médio</p>
++            <p className="text-xl font-bold text-foreground tabular-nums mt-0.5">
++              {formatBRL(hoje.ticket_medio_centavos)}
++            </p>
++          </div>
++        </div>
++      </div>
+     </div>
+   )
+ }
+diff --git a/apps/admin/src/pages/dashboard/components/TopProdutos.tsx b/apps/admin/src/pages/dashboard/components/TopProdutos.tsx
+index 98381b3..6767fd7 100644
+--- a/apps/admin/src/pages/dashboard/components/TopProdutos.tsx
++++ b/apps/admin/src/pages/dashboard/components/TopProdutos.tsx
+@@ -1,18 +1,25 @@
+ import { TrendingUp } from 'lucide-react'
+-import { type ProdutoTop } from '@/data/dashboard.mock'
+ 
+-function formatBRL(centavos: number) {
+-  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
+-    centavos / 100,
+-  )
++interface ProdutoTop {
++  id: string
++  name: string
++  sku: string | null
++  unidades_vendidas: number
++  receita_centavos: number
+ }
+ 
+ interface TopProdutosProps {
+   produtos: ProdutoTop[]
+ }
+ 
++function formatBRL(centavos: number) {
++  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
++    centavos / 100,
++  )
++}
++
+ export function TopProdutos({ produtos }: TopProdutosProps) {
+-  const maxVendidos = produtos[0]?.vendidos ?? 1
++  const maxVendidos = produtos[0]?.unidades_vendidas ?? 1
+ 
+   return (
+     <div className="rounded-xl border bg-card p-5 shadow-sm">
+@@ -21,26 +28,36 @@ export function TopProdutos({ produtos }: TopProdutosProps) {
+         <h2 className="font-display text-base font-bold text-foreground">Mais vendidos hoje</h2>
+       </div>
+ 
+-      <div className="space-y-3">
+-        {produtos.map((p, i) => (
+-          <div key={p.id} className="flex items-center gap-3">
+-            <span className="text-xs font-bold text-muted-foreground w-4 shrink-0">{i + 1}</span>
+-            <div className="flex-1 min-w-0">
+-              <p className="text-sm font-medium text-foreground truncate">{p.nome}</p>
+-              <div className="mt-1 h-1.5 w-full rounded-full bg-muted overflow-hidden">
+-                <div
+-                  className="h-full rounded-full bg-primary transition-all"
+-                  style={{ width: `${(p.vendidos / maxVendidos) * 100}%` }}
+-                />
++      {produtos.length === 0 ? (
++        <div className="flex items-center justify-center py-6 text-sm text-muted-foreground">
++          Nenhuma venda registrada hoje
++        </div>
++      ) : (
++        <div className="space-y-3">
++          {produtos.map((p, i) => (
++            <div key={p.id} className="flex items-center gap-3">
++              <span className="text-xs font-bold text-muted-foreground w-4 shrink-0">{i + 1}</span>
++              <div className="flex-1 min-w-0">
++                <p className="text-sm font-medium text-foreground truncate">{p.name}</p>
++                <div className="mt-1 h-1.5 w-full rounded-full bg-muted overflow-hidden">
++                  <div
++                    className="h-full rounded-full bg-primary transition-all"
++                    style={{ width: `${(p.unidades_vendidas / maxVendidos) * 100}%` }}
++                  />
++                </div>
++              </div>
++              <div className="shrink-0 text-right">
++                <p className="text-sm font-semibold tabular-nums text-foreground">
++                  {p.unidades_vendidas} un
++                </p>
++                <p className="text-xs text-muted-foreground tabular-nums">
++                  {formatBRL(p.receita_centavos)}
++                </p>
+               </div>
+             </div>
+-            <div className="shrink-0 text-right">
+-              <p className="text-sm font-semibold tabular-nums text-foreground">{p.vendidos} un</p>
+-              <p className="text-xs text-muted-foreground tabular-nums">{formatBRL(p.receita)}</p>
+-            </div>
+-          </div>
+-        ))}
+-      </div>
++          ))}
++        </div>
++      )}
+     </div>
+   )
+ }
+diff --git a/apps/admin/src/pages/dashboard/components/VendasChart.tsx b/apps/admin/src/pages/dashboard/components/VendasChart.tsx
+index 2d5bf0f..b0ddfe3 100644
+--- a/apps/admin/src/pages/dashboard/components/VendasChart.tsx
++++ b/apps/admin/src/pages/dashboard/components/VendasChart.tsx
+@@ -1,3 +1,4 @@
++import { useMemo } from 'react'
+ import {
+   ResponsiveContainer,
+   BarChart,
+@@ -7,7 +8,12 @@ import {
+   Tooltip,
+   CartesianGrid,
+ } from 'recharts'
+-import { type VendasDia } from '@/data/dashboard.mock'
++
++interface VendasDia {
++  data: string
++  total_centavos: number
++  total_pedidos: number
++}
+ 
+ function formatBRL(centavos: number) {
+   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
+@@ -15,16 +21,33 @@ function formatBRL(centavos: number) {
+   )
+ }
+ 
++function getDayLabel(isoDate: string, isLast: boolean): string {
++  if (isLast) return 'Hoje'
++  const [year, month, day] = isoDate.split('-').map(Number)
++  return new Date(year, month - 1, day).toLocaleDateString('pt-BR', { weekday: 'short' })
++}
++
+ interface VendasChartProps {
+   dados: VendasDia[]
+ }
+ 
+ export function VendasChart({ dados }: VendasChartProps) {
++  const chartData = useMemo(
++    () =>
++      dados.map((d, i) => ({
++        ...d,
++        label: getDayLabel(d.data, i === dados.length - 1),
++      })),
++    [dados],
++  )
++
+   return (
+     <div className="rounded-xl border bg-card p-5 shadow-sm">
+-      <h2 className="font-display text-base font-bold text-foreground mb-4">Vendas — últimos 7 dias</h2>
++      <h2 className="font-display text-base font-bold text-foreground mb-4">
++        Vendas — últimos 7 dias
++      </h2>
+       <ResponsiveContainer width="100%" height={180}>
+-        <BarChart data={dados} barSize={28} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
++        <BarChart data={chartData} barSize={28} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
+           <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
+           <XAxis
+             dataKey="label"
+@@ -50,7 +73,7 @@ export function VendasChart({ dados }: VendasChartProps) {
+             }}
+           />
+           <Bar
+-            dataKey="total"
++            dataKey="total_centavos"
+             fill="var(--color-primary)"
+             radius={[4, 4, 0, 0]}
+             opacity={0.9}
+diff --git a/apps/api/src/modules/relatorios/relatorios.controller.ts b/apps/api/src/modules/relatorios/relatorios.controller.ts
+index 091afad..ff700d8 100644
+--- a/apps/api/src/modules/relatorios/relatorios.controller.ts
++++ b/apps/api/src/modules/relatorios/relatorios.controller.ts
+@@ -16,6 +16,17 @@ import { RelatoriosService } from './relatorios.service';
+ export class RelatoriosController {
+   constructor(private readonly service: RelatoriosService) {}
+ 
++  @Get('dashboard')
++  @Roles(SystemRole.ADMINISTRADOR)
++  @ApiOperation({
++    summary: 'Dados consolidados do dashboard',
++    description:
++      'Retorna KPIs de hoje e ontem, série diária dos últimos 7 dias, top produtos do dia, contagem de estoque crítico e alertas recentes. Escopo: unidade do usuário autenticado.',
++  })
++  getDashboard(@CurrentUser() user: JwtSystemPayload) {
++    return this.service.getDashboard(user);
++  }
++
+   @Get('vendas')
+   @Roles(SystemRole.ADMINISTRADOR)
+   @ApiOperation({
+diff --git a/apps/api/src/modules/relatorios/relatorios.repository.ts b/apps/api/src/modules/relatorios/relatorios.repository.ts
+index 8ebfef0..711f0fa 100644
+--- a/apps/api/src/modules/relatorios/relatorios.repository.ts
++++ b/apps/api/src/modules/relatorios/relatorios.repository.ts
+@@ -67,6 +67,23 @@ export interface ProdutoVolumeRow {
+   preco_medio_centavos: Prisma.Decimal;
+ }
+ 
++export interface VendasDiaRow {
++  data: Date;
++  total_centavos: bigint;
++  total_pedidos: bigint;
++}
++
++export interface EstoqueCriticoCountRow {
++  count: bigint;
++}
++
++export interface AlertaRecenteRow {
++  id: string;
++  type: string;
++  message: string;
++  created_at: Date;
++}
++
+ @Injectable()
+ export class RelatoriosRepository {
+   constructor(private readonly prisma: PrismaService) {}
+@@ -361,6 +378,51 @@ export class RelatoriosRepository {
+     `;
+   }
+ 
++  // ── Dashboard ─────────────────────────────────────────────────────────────────
++
++  queryVendasSerieDiaria(unitId: string, startDate: Date): Promise<VendasDiaRow[]> {
++    return this.prisma.$queryRaw<VendasDiaRow[]>`
++      SELECT
++        d.day::date                                   AS data,
++        COALESCE(SUM(vi.total_centavos), 0)::bigint   AS total_centavos,
++        COUNT(DISTINCT v.id)::bigint                  AS total_pedidos
++      FROM generate_series(${startDate}::date, CURRENT_DATE::date, '1 day'::interval) AS d(day)
++      LEFT JOIN vendas v
++        ON DATE(v.created_at) = d.day::date
++        AND v.unidade_id = ${unitId}
++        AND v.status = 'FINALIZADA'
++      LEFT JOIN venda_items vi ON vi.venda_id = v.id
++      GROUP BY d.day
++      ORDER BY d.day ASC
++    `;
++  }
++
++  queryEstoqueCriticoCount(unitId: string, threshold: number): Promise<EstoqueCriticoCountRow[]> {
++    return this.prisma.$queryRaw<EstoqueCriticoCountRow[]>`
++      SELECT COUNT(*)::bigint AS count
++      FROM (
++        SELECT p.id
++        FROM products p
++        LEFT JOIN stock_movements sm ON sm.product_id = p.id AND sm.unidade_id = ${unitId}
++        WHERE p.unidade_id = ${unitId}
++          AND p.active = true
++        GROUP BY p.id
++        HAVING COALESCE(SUM(sm.quantity), 0) > 0
++          AND COALESCE(SUM(sm.quantity), 0) <= ${threshold}
++      ) sub
++    `;
++  }
++
++  queryAlertasRecentes(unitId: string, limit: number): Promise<AlertaRecenteRow[]> {
++    return this.prisma.$queryRaw<AlertaRecenteRow[]>`
++      SELECT id, type, message, created_at
++      FROM alert_events
++      WHERE unidade_id = ${unitId}
++      ORDER BY created_at DESC
++      LIMIT ${limit}
++    `;
++  }
++
+   queryProdutosPorVolume(
+     unitId: string,
+     inicio: Date,
+diff --git a/apps/api/src/modules/relatorios/relatorios.service.ts b/apps/api/src/modules/relatorios/relatorios.service.ts
+index 3bc11c1..13ae862 100644
+--- a/apps/api/src/modules/relatorios/relatorios.service.ts
++++ b/apps/api/src/modules/relatorios/relatorios.service.ts
+@@ -9,6 +9,7 @@ import { QueryVendasDto } from './dto/query-vendas.dto';
+ import {
+   RelatoriosRepository,
+   ProdutoVolumeRow,
++  VendasDiaRow,
+ } from './relatorios.repository';
+ 
+ // ─── Tipos de retorno ─────────────────────────────────────────────────────────
+@@ -90,6 +91,42 @@ export interface RelatorioProdutosResult {
+   piores: ProdutoRanking[];
+ }
+ 
++export interface DashboardKpi {
++  total_centavos: number;
++  total_pedidos: number;
++  ticket_medio_centavos: number;
++}
++
++export interface DashboardSerieDia {
++  data: string;
++  total_centavos: number;
++  total_pedidos: number;
++}
++
++export interface DashboardTopProduto {
++  id: string;
++  name: string;
++  sku: string | null;
++  unidades_vendidas: number;
++  receita_centavos: number;
++}
++
++export interface DashboardAlerta {
++  id: string;
++  tipo: string;
++  mensagem: string;
++  criado_em: string;
++}
++
++export interface DashboardResult {
++  hoje: DashboardKpi;
++  ontem: DashboardKpi;
++  serie_7_dias: DashboardSerieDia[];
++  top_produtos: DashboardTopProduto[];
++  estoque_critico_count: number;
++  alertas: DashboardAlerta[];
++}
++
+ // ─── Raw query row types ──────────────────────────────────────────────────────
+ 
+ interface VendasTotalizadoresRow {
+@@ -355,4 +392,65 @@ export class RelatoriosService {
+       piores: pioresRows.map(mapProduto),
+     };
+   }
++
++  // ── Dashboard ─────────────────────────────────────────────────────────────────
++
++  async getDashboard(user: JwtSystemPayload): Promise<DashboardResult> {
++    const unitId = await this.tenancy.resolveUnitId(user);
++
++    const now = new Date();
++    const startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6, 0, 0, 0, 0);
++    const hojeInicio = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
++    const hojeFim = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
++
++    const [serie, topProdutos, estoqueCriticoRows, alertasRows] = await Promise.all([
++      this.repository.queryVendasSerieDiaria(unitId, startDate),
++      this.repository.queryTopProdutosVendas(unitId, hojeInicio, hojeFim, 5),
++      this.repository.queryEstoqueCriticoCount(unitId, 5),
++      this.repository.queryAlertasRecentes(unitId, 5),
++    ]);
++
++    const makeKpi = (row: VendasDiaRow | null | undefined): DashboardKpi => {
++      const total = row ? this.toBigIntNumber(row.total_centavos) : 0;
++      const pedidos = row ? this.toBigIntNumber(row.total_pedidos) : 0;
++      return {
++        total_centavos: total,
++        total_pedidos: pedidos,
++        ticket_medio_centavos: pedidos > 0 ? Math.round(total / pedidos) : 0,
++      };
++    };
++
++    const toIsoDate = (val: Date | unknown): string => {
++      const d = val instanceof Date ? val : new Date(String(val));
++      return d.toISOString().split('T')[0];
++    };
++
++    return {
++      hoje: makeKpi(serie[serie.length - 1]),
++      ontem: makeKpi(serie[serie.length - 2]),
++      serie_7_dias: serie.map((r) => ({
++        data: toIsoDate(r.data),
++        total_centavos: this.toBigIntNumber(r.total_centavos),
++        total_pedidos: this.toBigIntNumber(r.total_pedidos),
++      })),
++      top_produtos: topProdutos.map((r) => ({
++        id: r.id,
++        name: r.name,
++        sku: r.sku,
++        unidades_vendidas: this.toInt(r.unidades_vendidas),
++        receita_centavos: this.toBigIntNumber(r.receita_centavos),
++      })),
++      estoque_critico_count: this.toBigIntNumber(
++        estoqueCriticoRows[0]?.count ?? BigInt(0),
++      ),
++      alertas: alertasRows.map((r) => ({
++        id: r.id,
++        tipo: r.type,
++        mensagem: r.message,
++        criado_em: r.created_at instanceof Date
++          ? r.created_at.toISOString()
++          : String(r.created_at),
++      })),
++    };
++  }
+ }

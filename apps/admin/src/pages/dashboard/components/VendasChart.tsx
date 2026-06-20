@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import {
   ResponsiveContainer,
   BarChart,
@@ -7,7 +8,12 @@ import {
   Tooltip,
   CartesianGrid,
 } from 'recharts'
-import { type VendasDia } from '@/data/dashboard.mock'
+
+interface VendasDia {
+  data: string
+  total_centavos: number
+  total_pedidos: number
+}
 
 function formatBRL(centavos: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
@@ -15,16 +21,40 @@ function formatBRL(centavos: number) {
   )
 }
 
+function getTodayStr(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function getDayLabel(isoDate: string, todayStr: string): string {
+  if (isoDate === todayStr) return 'Hoje'
+  const [year, month, day] = isoDate.split('-').map(Number)
+  return new Date(year, month - 1, day).toLocaleDateString('pt-BR', { weekday: 'short' })
+}
+
 interface VendasChartProps {
   dados: VendasDia[]
 }
 
 export function VendasChart({ dados }: VendasChartProps) {
+  const todayStr = useMemo(getTodayStr, [])
+
+  const chartData = useMemo(
+    () =>
+      dados.map((d) => ({
+        ...d,
+        label: getDayLabel(d.data, todayStr),
+      })),
+    [dados, todayStr],
+  )
+
   return (
     <div className="rounded-xl border bg-card p-5 shadow-sm">
-      <h2 className="font-display text-base font-bold text-foreground mb-4">Vendas — últimos 7 dias</h2>
+      <h2 className="font-display text-base font-bold text-foreground mb-4">
+        Vendas — últimos 7 dias
+      </h2>
       <ResponsiveContainer width="100%" height={180}>
-        <BarChart data={dados} barSize={28} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
+        <BarChart data={chartData} barSize={28} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
           <XAxis
             dataKey="label"
@@ -50,7 +80,7 @@ export function VendasChart({ dados }: VendasChartProps) {
             }}
           />
           <Bar
-            dataKey="total"
+            dataKey="total_centavos"
             fill="var(--color-primary)"
             radius={[4, 4, 0, 0]}
             opacity={0.9}
