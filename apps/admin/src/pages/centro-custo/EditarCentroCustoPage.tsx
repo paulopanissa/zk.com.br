@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Check, CircleDollarSign, DollarSign, Edit2, ListChecks, Percent, Plus, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -16,11 +16,12 @@ import { cn } from '@/lib/utils'
 import { api } from '@/lib/api'
 import {
   buildItemForm,
+  computeSummary,
   extractError,
   fmtBrl,
   fmtPct,
-  type CenterSummary,
   type CostCenter,
+  type CostCenterWithItems,
   type CostItem,
   type ItemFormState,
 } from './utils'
@@ -41,18 +42,19 @@ export function EditarCentroCustoPage() {
   const saveSuccessTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const [items, setItems] = useState<CostItem[]>([])
-  const [summary, setSummary] = useState<CenterSummary | null>(null)
-  const [loadingItems, setLoadingItems] = useState(false)
-  const [itemsError, setItemsError] = useState('')
 
   const [showItemForm, setShowItemForm] = useState(false)
   const [editingItem, setEditingItem] = useState<CostItem | null>(null)
   const [itemForm, setItemForm] = useState<ItemFormState>(buildItemForm())
   const [savingItem, setSavingItem] = useState(false)
   const [itemFormError, setItemFormError] = useState('')
+  const [itemsError, setItemsError] = useState('')
 
   const [deleteItemTarget, setDeleteItemTarget] = useState<CostItem | null>(null)
   const [deletingItemId, setDeletingItemId] = useState<string | null>(null)
+
+  // Derived — no API call needed; backend returns items inside GET /cost-centers/:id
+  const summary = useMemo(() => computeSummary(items), [items])
 
   useEffect(() => {
     return () => {
@@ -62,40 +64,23 @@ export function EditarCentroCustoPage() {
 
   // ── Load ───────────────────────────────────────────────────────────────
 
-  const loadItems = useCallback(async (centerId: string) => {
-    setLoadingItems(true)
-    setItemsError('')
-    try {
-      const [itemsRes, summaryRes] = await Promise.all([
-        api.get<{ data: CostItem[] }>(`/cost-centers/${centerId}/items`),
-        api.get<CenterSummary>(`/cost-centers/${centerId}/summary`),
-      ])
-      setItems(itemsRes.data.data)
-      setSummary(summaryRes.data)
-    } catch {
-      setItemsError('Erro ao carregar itens')
-    } finally {
-      setLoadingItems(false)
-    }
-  }, [])
-
   useEffect(() => {
     if (!id) return
     setLoadingCenter(true)
     api
-      .get<CostCenter>(`/cost-centers/${id}`)
+      .get<CostCenterWithItems>(`/cost-centers/${id}`)
       .then(({ data }) => {
         setCenter(data)
         setNome(data.nome)
         setDescricao(data.descricao ?? '')
-        loadItems(id)
+        setItems(data.items ?? [])
       })
       .catch(() => {
         setLoadError('Centro de custo não encontrado')
         navigate('/centro-custo', { replace: true })
       })
       .finally(() => setLoadingCenter(false))
-  }, [id, loadItems, navigate])
+  }, [id, navigate])
 
   // ── Save center ────────────────────────────────────────────────────────
 
@@ -191,8 +176,6 @@ export function EditarCentroCustoPage() {
         const { data } = await api.post<CostItem>(`/cost-centers/${id}/items`, payload)
         setItems((prev) => [...prev, data])
       }
-      const { data: sum } = await api.get<CenterSummary>(`/cost-centers/${id}/summary`)
-      setSummary(sum)
       cancelItemForm()
     } catch (err) {
       setItemFormError(extractError(err))
@@ -210,8 +193,6 @@ export function EditarCentroCustoPage() {
     try {
       await api.delete(`/cost-centers/${id}/items/${deleteItemTarget.id}`)
       setItems((prev) => prev.filter((i) => i.id !== deleteItemTarget.id))
-      const { data: sum } = await api.get<CenterSummary>(`/cost-centers/${id}/summary`)
-      setSummary(sum)
       setDeleteItemTarget(null)
     } catch {
       setItemsError('Erro ao excluir item')
@@ -254,7 +235,7 @@ export function EditarCentroCustoPage() {
         </p>
       </div>
 
-      <div className="max-w-2xl space-y-5">
+      <div className="space-y-5">
         {/* Center info card */}
         <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
           <div className="flex items-center gap-2 border-b border-border bg-muted/30 px-4 py-3">
@@ -422,17 +403,12 @@ export function EditarCentroCustoPage() {
           )}
 
           {/* Items list — no nested card borders, clean dividers */}
-          {loadingItems && (
-            <p className="px-4 py-8 text-center text-sm text-muted-foreground">
-              Carregando itens...
-            </p>
-          )}
           {itemsError && (
             <p className="px-4 py-3 text-sm text-destructive border-b border-border">
               {itemsError}
             </p>
           )}
-          {!loadingItems && items.length === 0 && !showItemForm && (
+          {items.length === 0 && !showItemForm && (
             <div className="px-4 py-10 flex flex-col items-center gap-3 text-center">
               <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted">
                 <ListChecks className="h-5 w-5 text-muted-foreground" />
