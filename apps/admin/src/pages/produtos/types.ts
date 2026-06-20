@@ -2,7 +2,43 @@ export interface ProductPricing {
   cost_price_cents: number
   sale_price_cents: number
   promotional_price_cents: number | null
+  promotional_starts_at: string | null
+  promotional_ends_at: string | null
+  discount_enabled: boolean
+  max_discount_pct: number | null
   margin_pct: string | null
+}
+
+export interface ProductDelivery {
+  weight_grams: number | null
+  height_cm: number | null
+  width_cm: number | null
+  depth_cm: number | null
+  free_shipping: boolean
+  ships_from_store: boolean
+}
+
+export interface ProductFiscal {
+  ncm: string | null
+  cfop: string | null
+  cest: string | null
+  origem: number | null
+  cst_icms: string | null
+  csosn: string | null
+  cst_pis: string | null
+  cst_cofins: string | null
+  cst_ipi: string | null
+  aliquota_icms: number | null
+  aliquota_pis: number | null
+  aliquota_cofins: number | null
+  aliquota_ipi: number | null
+}
+
+export interface ProductSeo {
+  seo_title: string | null
+  seo_description: string | null
+  seo_keywords: string[]
+  schema_org_json: object | null
 }
 
 export interface ProductMedia {
@@ -35,6 +71,9 @@ export interface Product {
   featured: boolean
   min_stock: number
   pricing: ProductPricing | null
+  delivery: ProductDelivery | null
+  fiscal: ProductFiscal | null
+  seo: ProductSeo | null
   category: ProductCategory | null
   brand: ProductBrand | null
   media: ProductMedia[]
