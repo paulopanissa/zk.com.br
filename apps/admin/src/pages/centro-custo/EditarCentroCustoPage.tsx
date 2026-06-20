@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Check, DollarSign, Edit2, Percent, Plus, Trash2 } from 'lucide-react'
+import { ArrowLeft, Check, CircleDollarSign, DollarSign, Edit2, ListChecks, Percent, Plus, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -237,103 +237,114 @@ export function EditarCentroCustoPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-4">
+      {/* Back + page title */}
+      <div>
         <Button
           variant="ghost"
           size="sm"
           onClick={() => navigate('/centro-custo')}
-          className="gap-1.5 text-muted-foreground"
+          className="gap-1.5 text-muted-foreground -ml-2 mb-3"
         >
           <ArrowLeft className="h-4 w-4" />
-          Voltar
+          Centros de custo
         </Button>
-        <div>
-          <h1 className="text-2xl font-semibold text-foreground">{center.nome}</h1>
-          <p className="mt-0.5 text-sm text-muted-foreground">
-            Edite as informações e gerencie os itens de custo
-          </p>
-        </div>
+        <h1 className="text-2xl font-semibold text-foreground">{center.nome}</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Edite as informações e gerencie os itens de custo
+        </p>
       </div>
 
       <div className="max-w-2xl space-y-6">
-        {/* Center info form */}
-        <div className="rounded-lg border border-border bg-card p-6 shadow-sm space-y-5">
-          <h2 className="text-sm font-semibold text-foreground">Informações</h2>
-
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-foreground">Nome *</label>
-            <Input
-              value={nome}
-              onChange={(e) => setNome(e.target.value)}
-              placeholder="Ex: Custos operacionais"
-              maxLength={120}
-            />
+        {/* Center info card */}
+        <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
+          <div className="flex items-center gap-2 border-b border-border bg-muted/30 px-4 py-3">
+            <CircleDollarSign className="h-4 w-4 text-muted-foreground shrink-0" />
+            <span className="text-sm font-semibold text-foreground">Informações</span>
           </div>
 
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-foreground">Descrição</label>
-            <textarea
-              value={descricao}
-              onChange={(e) => setDescricao(e.target.value)}
-              placeholder="Descreva o propósito deste centro de custo..."
-              rows={3}
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring resize-none"
-            />
-          </div>
-
-          {saveError && <p className="text-sm text-destructive">{saveError}</p>}
-          {saveSuccess && (
-            <p className="text-sm text-emerald-600 flex items-center gap-1.5">
-              <Check className="h-4 w-4" />
-              Informações salvas
-            </p>
-          )}
-
-          <Button onClick={saveCenter} disabled={saving}>
-            {saving ? 'Salvando...' : 'Salvar informações'}
-          </Button>
-        </div>
-
-        {/* Items section */}
-        <div className="rounded-lg border border-border bg-card p-6 shadow-sm space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-sm font-semibold text-foreground">Itens de custo</h2>
-              {summary && (
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  {fmtBrl(summary.total_fixo_centavos)} fixo ·{' '}
-                  {fmtPct(summary.total_variavel_bps)} variável
-                </p>
-              )}
+          <div className="p-6 space-y-5">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-foreground">
+                Nome <span className="text-destructive">*</span>
+              </label>
+              <Input
+                value={nome}
+                onChange={(e) => setNome(e.target.value)}
+                placeholder="Ex: Custos operacionais"
+                maxLength={120}
+              />
             </div>
-            {!showItemForm && (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={startAddItem}
-                className="gap-1.5 h-8 text-xs"
-              >
-                <Plus className="h-3.5 w-3.5" />
-                Adicionar item
-              </Button>
+
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-foreground">
+                Descrição{' '}
+                <span className="text-xs font-normal text-muted-foreground">(opcional)</span>
+              </label>
+              <textarea
+                value={descricao}
+                onChange={(e) => setDescricao(e.target.value)}
+                placeholder="Descreva o propósito deste centro de custo..."
+                rows={3}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring resize-none"
+              />
+            </div>
+
+            {saveError && <p className="text-sm text-destructive">{saveError}</p>}
+            {saveSuccess && (
+              <p className="text-sm text-emerald-700 flex items-center gap-1.5">
+                <Check className="h-4 w-4" />
+                Informações salvas com sucesso
+              </p>
             )}
           </div>
 
-          {/* Item form */}
+          <div className="border-t border-border bg-muted/20 px-6 py-4">
+            <Button onClick={saveCenter} disabled={saving}>
+              {saving ? 'Salvando...' : 'Salvar informações'}
+            </Button>
+          </div>
+        </div>
+
+        {/* Items card */}
+        <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
+          {/* Section header */}
+          <div className="flex items-center gap-2 border-b border-border bg-muted/30 px-4 py-3">
+            <ListChecks className="h-4 w-4 text-muted-foreground shrink-0" />
+            <span className="text-sm font-semibold text-foreground">Itens de custo</span>
+            {summary && (
+              <div className="ml-auto flex items-center gap-2">
+                {summary.total_fixo_centavos > 0 && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-foreground">
+                    <DollarSign className="h-3 w-3 text-muted-foreground" />
+                    {fmtBrl(summary.total_fixo_centavos)}
+                  </span>
+                )}
+                {summary.total_variavel_bps > 0 && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-foreground">
+                    <Percent className="h-3 w-3 text-muted-foreground" />
+                    {fmtPct(summary.total_variavel_bps)}
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Inline item form — no nested card, uses a muted band */}
           {showItemForm && (
-            <div className="rounded-lg border border-border bg-muted/20 p-4 space-y-3">
-              <p className="text-sm font-medium text-foreground">
+            <div className="border-b border-border bg-muted/20 px-4 py-5 space-y-4">
+              <p className="text-sm font-semibold text-foreground">
                 {editingItem ? 'Editar item' : 'Novo item'}
               </p>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-medium text-muted-foreground">Nome *</label>
+                <label className="text-xs font-medium text-muted-foreground">
+                  Nome <span className="text-destructive">*</span>
+                </label>
                 <Input
                   value={itemForm.nome}
                   onChange={(e) => setIF('nome', e.target.value)}
                   placeholder="Ex: Embalagem"
-                  className="h-8 text-sm"
+                  className="h-9 text-sm"
                   maxLength={120}
                   autoFocus
                 />
@@ -351,7 +362,7 @@ export function EditarCentroCustoPage() {
                         setIF('valor', '')
                       }}
                       className={cn(
-                        'flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors',
+                        'flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors',
                         itemForm.tipo === t
                           ? 'border-primary bg-primary text-primary-foreground'
                           : 'border-border text-muted-foreground hover:border-primary',
@@ -370,7 +381,8 @@ export function EditarCentroCustoPage() {
 
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-muted-foreground">
-                  {itemForm.tipo === 'FIXO' ? 'Valor (R$) *' : 'Percentual (%) *'}
+                  {itemForm.tipo === 'FIXO' ? 'Valor (R$)' : 'Percentual (%)'}{' '}
+                  <span className="text-destructive">*</span>
                 </label>
                 <div className="relative">
                   {itemForm.tipo === 'FIXO' && (
@@ -384,7 +396,7 @@ export function EditarCentroCustoPage() {
                     step="0.01"
                     value={itemForm.valor}
                     onChange={(e) => setIF('valor', e.target.value)}
-                    className={cn('h-8 text-sm', itemForm.tipo === 'FIXO' ? 'pl-8' : 'pr-6')}
+                    className={cn('h-9 text-sm', itemForm.tipo === 'FIXO' ? 'pl-8' : 'pr-6')}
                     placeholder="0,00"
                   />
                   {itemForm.tipo === 'VARIAVEL' && (
@@ -397,93 +409,123 @@ export function EditarCentroCustoPage() {
 
               {itemFormError && <p className="text-xs text-destructive">{itemFormError}</p>}
 
-              <div className="flex gap-2 pt-1">
-                <Button
-                  size="sm"
-                  onClick={saveItem}
-                  disabled={savingItem}
-                  className="h-7 text-xs gap-1"
-                >
-                  <Check className="h-3 w-3" />
-                  {savingItem ? 'Salvando...' : 'Salvar'}
+              <div className="flex items-center gap-2 pt-1">
+                <Button size="sm" onClick={saveItem} disabled={savingItem} className="gap-1.5">
+                  <Check className="h-3.5 w-3.5" />
+                  {savingItem ? 'Salvando...' : 'Salvar item'}
                 </Button>
-                <Button size="sm" variant="ghost" onClick={cancelItemForm} className="h-7 text-xs">
+                <Button size="sm" variant="ghost" onClick={cancelItemForm}>
                   Cancelar
                 </Button>
               </div>
             </div>
           )}
 
-          {/* Items list */}
+          {/* Items list — no nested card borders, clean dividers */}
           {loadingItems && (
-            <p className="text-xs text-muted-foreground text-center py-4">Carregando itens...</p>
-          )}
-          {itemsError && <p className="text-sm text-destructive">{itemsError}</p>}
-          {!loadingItems && items.length === 0 && !showItemForm && (
-            <p className="text-sm text-muted-foreground text-center py-6">
-              Nenhum item cadastrado.{' '}
-              <button className="text-primary hover:underline" onClick={startAddItem}>
-                Adicionar o primeiro
-              </button>
+            <p className="px-4 py-8 text-center text-sm text-muted-foreground">
+              Carregando itens...
             </p>
           )}
+          {itemsError && (
+            <p className="px-4 py-3 text-sm text-destructive border-b border-border">
+              {itemsError}
+            </p>
+          )}
+          {!loadingItems && items.length === 0 && !showItemForm && (
+            <div className="px-4 py-10 flex flex-col items-center gap-3 text-center">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted">
+                <ListChecks className="h-5 w-5 text-muted-foreground" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-foreground">Nenhum item adicionado</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Adicione custos fixos (R$) ou variáveis (%) a este centro.
+                </p>
+              </div>
+              <Button size="sm" variant="outline" onClick={startAddItem} className="gap-1.5">
+                <Plus className="h-3.5 w-3.5" />
+                Adicionar item
+              </Button>
+            </div>
+          )}
           {items.length > 0 && (
-            <div className="space-y-1.5">
-              {items.map((item) => (
+            <>
+              {items.map((item, i) => (
                 <div
                   key={item.id}
                   className={cn(
-                    'flex items-center justify-between rounded-md px-3 py-2.5 bg-background border border-border/60',
-                    editingItem?.id === item.id && 'ring-1 ring-primary border-primary',
+                    'flex items-center justify-between px-4 py-3.5 hover:bg-muted/20 transition-colors',
+                    i > 0 && 'border-t border-border/40',
+                    editingItem?.id === item.id && 'bg-primary/5',
                   )}
                 >
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-foreground truncate">
-                        {item.nome}
-                      </span>
-                      <Badge
-                        variant={item.tipo === 'FIXO' ? 'outline' : 'secondary'}
-                        className="text-[10px] py-0 h-4 shrink-0"
-                      >
-                        {item.tipo}
-                      </Badge>
-                      {!item.ativo && (
-                        <Badge variant="secondary" className="text-[10px] py-0 h-4 shrink-0">
-                          inativo
-                        </Badge>
+                  <div className="min-w-0 flex items-center gap-3">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted">
+                      {item.tipo === 'FIXO' ? (
+                        <DollarSign className="h-3.5 w-3.5 text-muted-foreground" />
+                      ) : (
+                        <Percent className="h-3.5 w-3.5 text-muted-foreground" />
                       )}
                     </div>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {item.tipo === 'FIXO'
-                        ? fmtBrl(item.valor_centavos ?? 0)
-                        : fmtPct(item.percentual_bps ?? 0)}
-                    </p>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-foreground truncate">
+                          {item.nome}
+                        </span>
+                        {!item.ativo && (
+                          <Badge variant="secondary" className="text-[10px] py-0 h-4 shrink-0">
+                            inativo
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {item.tipo === 'FIXO'
+                          ? fmtBrl(item.valor_centavos ?? 0)
+                          : fmtPct(item.percentual_bps ?? 0)}{' '}
+                        <span className="text-muted-foreground/60">·</span>{' '}
+                        {item.tipo === 'FIXO' ? 'fixo' : 'variável'}
+                      </p>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1 shrink-0 ml-2">
+                  <div className="flex items-center gap-1 shrink-0 ml-3">
                     <Button
                       size="sm"
                       variant="ghost"
                       onClick={() => startEditItem(item)}
-                      className="h-7 w-7 p-0"
+                      className="h-8 w-8 p-0"
                       title="Editar item"
                     >
-                      <Edit2 className="h-3 w-3" />
+                      <Edit2 className="h-3.5 w-3.5" />
                     </Button>
                     <Button
                       size="sm"
                       variant="ghost"
                       onClick={() => setDeleteItemTarget(item)}
                       disabled={deletingItemId === item.id}
-                      className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                      className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
                       title="Excluir item"
                     >
-                      <Trash2 className="h-3 w-3" />
+                      <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   </div>
                 </div>
               ))}
-            </div>
+              {/* Add item footer */}
+              {!showItemForm && (
+                <div className="border-t border-border/40 px-4 py-3">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={startAddItem}
+                    className="gap-1.5 text-muted-foreground hover:text-foreground h-8"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Adicionar item
+                  </Button>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
