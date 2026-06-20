@@ -89,6 +89,8 @@ export function EditarProdutoPage() {
   const [marcas, setMarcas] = useState<NamedItem[]>([])
   const [media, setMedia] = useState<ProductMedia[]>([])
   const [deletingMediaId, setDeletingMediaId] = useState<string | null>(null)
+  const [mediaError, setMediaError] = useState('')
+  const [toggleError, setToggleError] = useState('')
 
   const [basicos, setBasicos] = useState<BasicosForm>({ name: '', sku: '', barcode: '', unit: '', min_stock: '0', featured: false, category_id: '', brand_id: '' })
   const [descricao, setDescricao] = useState<DescricaoForm>({ short_description: '', description: '' })
@@ -287,8 +289,13 @@ export function EditarProdutoPage() {
       if (fiscal.cfop) payload.cfop = fiscal.cfop
       if (fiscal.cest) payload.cest = fiscal.cest
       if (fiscal.origem !== '') payload.origem = parseInt(fiscal.origem)
-      if (fiscal.regime === 'cst') { if (fiscal.cst_icms) payload.cst_icms = fiscal.cst_icms }
-      else { if (fiscal.csosn) payload.csosn = fiscal.csosn }
+      if (fiscal.regime === 'cst') {
+        if (fiscal.cst_icms) payload.cst_icms = fiscal.cst_icms
+        payload.csosn = null
+      } else {
+        if (fiscal.csosn) payload.csosn = fiscal.csosn
+        payload.cst_icms = null
+      }
       if (fiscal.cst_pis) payload.cst_pis = fiscal.cst_pis
       if (fiscal.cst_cofins) payload.cst_cofins = fiscal.cst_cofins
       if (fiscal.cst_ipi) payload.cst_ipi = fiscal.cst_ipi
@@ -334,9 +341,12 @@ export function EditarProdutoPage() {
 
   async function toggleActive() {
     setTogglingActive(true)
+    setToggleError('')
     try {
       await api.patch(`/products/${id}`, { active: !active })
       setActive((v) => !v)
+    } catch (err) {
+      setToggleError(extractApiError(err))
     } finally {
       setTogglingActive(false)
     }
@@ -344,9 +354,12 @@ export function EditarProdutoPage() {
 
   async function deleteMedia(mediaId: string) {
     setDeletingMediaId(mediaId)
+    setMediaError('')
     try {
       await api.delete(`/products/${id}/media/${mediaId}`)
       setMedia((prev) => prev.filter((m) => m.id !== mediaId))
+    } catch (err) {
+      setMediaError(extractApiError(err))
     } finally {
       setDeletingMediaId(null)
     }
@@ -668,6 +681,11 @@ export function EditarProdutoPage() {
                 {/* MÍDIA */}
                 <TabsContent value="midia">
                   <div className="rounded-lg border border-border bg-card shadow-sm p-6 space-y-5">
+                    {mediaError && (
+                      <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                        {mediaError}
+                      </div>
+                    )}
                     {media.length > 0 && (
                       <div className="grid grid-cols-3 gap-3 sm:grid-cols-4">
                         {media.map((m) => (
@@ -814,6 +832,9 @@ export function EditarProdutoPage() {
                       : active ? 'Desativar produto' : 'Ativar produto'
                     }
                   </Button>
+                  {toggleError && (
+                    <p className="text-xs text-destructive text-center">{toggleError}</p>
+                  )}
                 </div>
               </div>
             </div>

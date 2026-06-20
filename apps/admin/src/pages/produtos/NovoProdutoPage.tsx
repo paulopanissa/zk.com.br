@@ -221,8 +221,13 @@ export function NovoProdutoPage() {
       if (fiscal.cfop) payload.cfop = fiscal.cfop
       if (fiscal.cest) payload.cest = fiscal.cest
       if (fiscal.origem !== '') payload.origem = parseInt(fiscal.origem)
-      if (fiscal.regime === 'cst') { if (fiscal.cst_icms) payload.cst_icms = fiscal.cst_icms }
-      else { if (fiscal.csosn) payload.csosn = fiscal.csosn }
+      if (fiscal.regime === 'cst') {
+        if (fiscal.cst_icms) payload.cst_icms = fiscal.cst_icms
+        payload.csosn = null
+      } else {
+        if (fiscal.csosn) payload.csosn = fiscal.csosn
+        payload.cst_icms = null
+      }
       if (fiscal.cst_pis) payload.cst_pis = fiscal.cst_pis
       if (fiscal.cst_cofins) payload.cst_cofins = fiscal.cst_cofins
       if (fiscal.cst_ipi) payload.cst_ipi = fiscal.cst_ipi
