@@ -287,7 +287,7 @@ export function EditarCentroCustoPage() {
 
   if (loadingCenter) {
     return (
-      <div className="space-y-6">
+      <div className="p-6 space-y-5">
         <div>
           <Link
             to="/centro-custo"
@@ -304,7 +304,7 @@ export function EditarCentroCustoPage() {
 
   if (centerError) {
     return (
-      <div className="space-y-6">
+      <div className="p-6 space-y-5">
         <div>
           <Link
             to="/centro-custo"
@@ -325,7 +325,7 @@ export function EditarCentroCustoPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="p-6 space-y-5">
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div>
@@ -346,7 +346,8 @@ export function EditarCentroCustoPage() {
               </Badge>
               {summary && (
                 <span className="text-sm text-muted-foreground">
-                  {fmtBrl(summary.total_fixo_centavos)} fixo · {fmtPct(summary.total_variavel_bps)} variável
+                  {fmtBrl(summary.total_fixo_centavos)} fixo ·{' '}
+                  {fmtPct(summary.total_variavel_bps)} variável
                 </span>
               )}
             </div>
@@ -355,7 +356,7 @@ export function EditarCentroCustoPage() {
         {center && (
           <div className="flex flex-col items-end gap-1 shrink-0">
             <Button
-              variant={center.ativo ? 'outline' : 'outline'}
+              variant="outline"
               size="sm"
               onClick={toggleActive}
               disabled={toggling}
@@ -367,16 +368,22 @@ export function EditarCentroCustoPage() {
             >
               {toggling ? '...' : center.ativo ? 'Desativar' : 'Ativar'}
             </Button>
-            {toggleError && <p className="text-xs text-destructive text-right">{toggleError}</p>}
+            {toggleError && (
+              <p className="text-xs text-destructive text-right">{toggleError}</p>
+            )}
           </div>
         )}
       </div>
 
-      {/* Basic info card */}
-      <div className="rounded-lg border border-border bg-card shadow-sm max-w-xl">
-        <div className="px-6 py-5">
-          <h2 className="text-sm font-semibold text-foreground mb-4">Informações básicas</h2>
-          <div className="space-y-4">
+      {/* Two-column grid: info (fixed) + items (fluid) */}
+      <div className="grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-5 items-start">
+        {/* Info card */}
+        <div className="rounded-lg border border-border bg-card shadow-sm">
+          <div className="px-5 py-4 border-b border-border/60">
+            <h2 className="text-sm font-semibold text-foreground">Informações básicas</h2>
+          </div>
+
+          <div className="px-5 py-4 space-y-4">
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-foreground" htmlFor="nome">
                 Nome <span className="text-destructive">*</span>
@@ -410,36 +417,35 @@ export function EditarCentroCustoPage() {
               </div>
             )}
           </div>
-        </div>
 
-        <div className="flex items-center justify-end border-t border-border/60 px-6 py-4">
-          <Button onClick={saveCenter} disabled={saving}>
-            {saving ? 'Salvando...' : saved ? '✓ Salvo' : 'Salvar informações'}
-          </Button>
-        </div>
-      </div>
-
-      {/* Items card */}
-      <div className="rounded-lg border border-border bg-card shadow-sm">
-        <div className="flex items-center justify-between px-6 py-5 border-b border-border/60">
-          <div>
-            <h2 className="text-sm font-semibold text-foreground">Itens de custo</h2>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Defina os custos fixos (em R$) e variáveis (em %) que compõem este centro
-            </p>
-          </div>
-          {!showItemForm && (
-            <Button size="sm" variant="outline" onClick={startAdd} className="gap-2">
-              <Plus className="h-3.5 w-3.5" />
-              Adicionar item
+          <div className="flex justify-end border-t border-border/60 px-5 py-3">
+            <Button onClick={saveCenter} disabled={saving}>
+              {saving ? 'Salvando...' : saved ? '✓ Salvo' : 'Salvar'}
             </Button>
-          )}
+          </div>
         </div>
 
-        <div className="px-6 py-5 space-y-4">
-          {/* Item form */}
+        {/* Items card */}
+        <div className="rounded-lg border border-border bg-card shadow-sm">
+          {/* Card header */}
+          <div className="flex items-center justify-between px-5 py-4 border-b border-border/60">
+            <div>
+              <h2 className="text-sm font-semibold text-foreground">Itens de custo</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Custos fixos (R$) e variáveis (%) deste centro
+              </p>
+            </div>
+            {!showItemForm && (
+              <Button size="sm" variant="outline" onClick={startAdd} className="gap-1.5 shrink-0">
+                <Plus className="h-3.5 w-3.5" />
+                Adicionar
+              </Button>
+            )}
+          </div>
+
+          {/* Item form — section inside card, not a nested card */}
           {showItemForm && (
-            <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-4">
+            <div className="px-5 py-4 border-b border-border/60 bg-muted/30 space-y-4">
               <p className="text-sm font-medium text-foreground">
                 {editingItem ? 'Editar item' : 'Novo item'}
               </p>
@@ -536,42 +542,53 @@ export function EditarCentroCustoPage() {
             </div>
           )}
 
-          {/* Items list */}
-          {loadingItems && (
-            <div className="space-y-2">
-              {[1, 2].map((i) => (
-                <div key={i} className="h-14 rounded-lg bg-muted animate-pulse" />
-              ))}
-            </div>
-          )}
-
+          {/* Items error */}
           {itemsError && (
-            <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            <div className="px-5 py-3 text-sm text-destructive bg-destructive/5 border-b border-destructive/20">
               {itemsError}
             </div>
           )}
 
+          {/* Loading skeleton */}
+          {loadingItems && (
+            <div className="divide-y divide-border/60">
+              {[1, 2].map((i) => (
+                <div key={i} className="flex items-center justify-between px-5 py-3">
+                  <div className="space-y-1.5">
+                    <div className="h-4 w-32 rounded bg-muted animate-pulse" />
+                    <div className="h-3 w-20 rounded bg-muted animate-pulse" />
+                  </div>
+                  <div className="flex gap-1">
+                    <div className="h-7 w-7 rounded bg-muted animate-pulse" />
+                    <div className="h-7 w-7 rounded bg-muted animate-pulse" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Empty state */}
           {!loadingItems && items.length === 0 && !showItemForm && (
-            <div className="py-10 text-center">
+            <div className="py-10 text-center px-5">
               <p className="text-sm font-medium text-foreground">Nenhum item cadastrado</p>
               <p className="text-sm text-muted-foreground mt-1">
-                Adicione custos fixos (embalagem, etiqueta) e variáveis (frete, taxa) para usar na
-                calculadora de preço.
+                Adicione custos fixos e variáveis para usar na calculadora de preço.
               </p>
-              <Button variant="outline" size="sm" onClick={startAdd} className="mt-4 gap-2">
+              <Button variant="outline" size="sm" onClick={startAdd} className="mt-4 gap-1.5">
                 <Plus className="h-3.5 w-3.5" />
                 Adicionar primeiro item
               </Button>
             </div>
           )}
 
+          {/* Items list — no wrapper border, divide-y carries the separation */}
           {items.length > 0 && (
-            <div className="divide-y divide-border/60 rounded-lg border border-border overflow-hidden">
+            <div className="divide-y divide-border/60">
               {items.map((item) => (
                 <div
                   key={item.id}
                   className={cn(
-                    'flex items-center justify-between px-4 py-3 bg-background transition-colors hover:bg-muted/20',
+                    'flex items-center justify-between px-5 py-3 transition-colors hover:bg-muted/20',
                     editingItem?.id === item.id && 'bg-primary/5',
                   )}
                 >
@@ -608,7 +625,7 @@ export function EditarCentroCustoPage() {
                       size="sm"
                       variant="ghost"
                       onClick={() => startEdit(item)}
-                      className="h-8 w-8 p-0"
+                      className="h-7 w-7 p-0"
                       title="Editar"
                     >
                       <Edit2 className="h-3.5 w-3.5" />
@@ -618,7 +635,7 @@ export function EditarCentroCustoPage() {
                       variant="ghost"
                       onClick={() => deleteItem(item)}
                       disabled={deletingItemId === item.id}
-                      className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
+                      className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
                       title="Excluir"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
@@ -629,9 +646,9 @@ export function EditarCentroCustoPage() {
             </div>
           )}
 
-          {/* Summary footer */}
+          {/* Summary strip */}
           {summary && items.length > 0 && (
-            <div className="flex items-center gap-6 pt-2 border-t border-border/40">
+            <div className="flex items-center gap-6 px-5 py-3 border-t border-border/60 bg-muted/20">
               <div>
                 <p className="text-xs text-muted-foreground">Total fixo</p>
                 <p className="text-sm font-semibold text-foreground">
@@ -645,7 +662,7 @@ export function EditarCentroCustoPage() {
                 </p>
               </div>
               <p className="text-xs text-muted-foreground ml-auto">
-                {items.filter((i) => i.ativo).length} de {items.length} itens ativos
+                {items.filter((i) => i.ativo).length}/{items.length} ativos
               </p>
             </div>
           )}
