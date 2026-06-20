@@ -26,6 +26,7 @@ import { RelatoriosPage } from '@/pages/relatorios/RelatoriosPage'
 import { AlertasPage } from '@/pages/alertas/AlertasPage'
 import { AiKeysPage } from '@/pages/ai-keys/AiKeysPage'
 import { LgpdPage } from '@/pages/lgpd/LgpdPage'
+import { CentroCustoPage } from '@/pages/centro-custo/CentroCustoPage'
 
 function AppRoutes() {
   return (
@@ -60,6 +61,7 @@ function AppRoutes() {
                 <Route path="/alertas" element={<AlertasPage />} />
                 <Route path="/ai-keys" element={<AiKeysPage />} />
                 <Route path="/lgpd" element={<LgpdPage />} />
+                <Route path="/centro-custo" element={<CentroCustoPage />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </AdminShell>

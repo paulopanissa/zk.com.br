@@ -20,6 +20,7 @@ import {
   Percent,
   Building2,
   LogOut,
+  Calculator,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/contexts/AuthContext'
@@ -43,6 +44,7 @@ const navItems: NavItem[] = [
   { icon: Users, label: 'Clientes', href: '/clientes', group: 'Comercial' },
   { icon: ShoppingBag, label: 'Pedidos', href: '/pedidos', group: 'Comercial' },
   { icon: Percent, label: 'Cupons', href: '/cupons', group: 'Comercial' },
+  { icon: Calculator, label: 'Centro de Custo', href: '/centro-custo', group: 'Comercial' },
   { icon: BarChart3, label: 'Relatórios', href: '/relatorios', group: 'Análise' },
   { icon: Bell, label: 'Alertas', href: '/alertas', group: 'Sistema' },
   { icon: Key, label: 'API Keys de IA', href: '/ai-keys', group: 'Sistema' },
