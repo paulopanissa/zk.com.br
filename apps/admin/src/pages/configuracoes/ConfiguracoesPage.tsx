@@ -302,6 +302,7 @@ function CredentialDialog({
                 </div>
                 <Input
                   type="password"
+                  autoComplete="off"
                   placeholder={isConfigured(chave) ? '••••••••••••' : 'Inserir valor...'}
                   value={values[chave] ?? ''}
                   onChange={(e) => setValues((v) => ({ ...v, [chave]: e.target.value }))}
@@ -360,6 +361,16 @@ function AddMethodDialog({
       setError('Selecione um provedor')
       return
     }
+    const pct = parseFloat(taxaPct.replace(',', '.'))
+    const fixed = parseFloat(taxaFixed.replace(',', '.'))
+    if (taxaPct && isNaN(pct)) {
+      setError('Taxa % inválida — use ponto como separador decimal (ex: 1.50)')
+      return
+    }
+    if (taxaFixed && isNaN(fixed)) {
+      setError('Taxa fixa inválida — use ponto como separador decimal (ex: 0.50)')
+      return
+    }
     setSaving(true)
     setError('')
     try {
@@ -367,8 +378,8 @@ function AddMethodDialog({
         canal,
         metodo,
         provider_id: providerId,
-        taxa_percentual: Math.round((parseFloat(taxaPct) || 0) * 100),
-        taxa_fixa_centavos: Math.round((parseFloat(taxaFixed) || 0) * 100),
+        taxa_percentual: Math.round((pct || 0) * 100),
+        taxa_fixa_centavos: Math.round((fixed || 0) * 100),
       })
       onSaved()
       onClose()
@@ -480,6 +491,7 @@ function ProvidersSection({
   onRefresh: () => void
 }) {
   const [togglingSlug, setTogglingSlug] = useState<string | null>(null)
+  const [toggleErrors, setToggleErrors] = useState<Record<string, string>>({})
   const [testingSlug, setTestingSlug] = useState<string | null>(null)
   const [testResults, setTestResults] = useState<Record<string, boolean | null>>({})
   const [credentialTarget, setCredentialTarget] = useState<ProviderDetail | null>(null)
@@ -491,7 +503,6 @@ function ProvidersSection({
       const { data } = await api.get<ProviderDetail>(`/payment-config/providers/${slug}`)
       setCredentialTarget(data)
     } catch {
-      // Fallback: use summary data
       const found = providers.find((p) => p.slug === slug)
       if (found) setCredentialTarget({ ...found, credentials: [] })
     } finally {
@@ -502,12 +513,18 @@ function ProvidersSection({
   async function toggleProvider(provider: ProviderSummary) {
     if (togglingSlug) return
     setTogglingSlug(provider.slug)
+    setToggleErrors((e) => ({ ...e, [provider.slug]: '' }))
     try {
       const action = provider.ativo ? 'deactivate' : 'activate'
       await api.put(`/payment-config/providers/${provider.slug}/${action}`)
       onRefresh()
-    } catch {
-      // silently fail — user will see no change and can retry
+    } catch (err) {
+      const apiErr = err as { response?: { data?: { message?: string; missing_keys?: string[] } } }
+      const missing = apiErr.response?.data?.missing_keys
+      const msg = missing?.length
+        ? `Credenciais ausentes: ${missing.join(', ')}`
+        : (apiErr.response?.data?.message ?? 'Erro ao alterar status')
+      setToggleErrors((e) => ({ ...e, [provider.slug]: msg }))
     } finally {
       setTogglingSlug(null)
     }
@@ -599,6 +616,14 @@ function ProvidersSection({
                   </Button>
                 </div>
               </div>
+              {toggleErrors[provider.slug] && (
+                <div className="border-t border-border/60 bg-destructive/5 px-4 py-2">
+                  <p className="text-xs text-destructive flex items-center gap-1">
+                    <XCircle className="h-3 w-3 shrink-0" />
+                    {toggleErrors[provider.slug]}
+                  </p>
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -610,7 +635,6 @@ function ProvidersSection({
         onClose={() => setCredentialTarget(null)}
         onSaved={() => {
           onRefresh()
-          // Re-fetch provider detail to refresh configured keys
           if (credentialTarget) openCredentials(credentialTarget.slug)
         }}
       />
@@ -922,6 +946,12 @@ function MethodFeeEditor({
   const [error, setError] = useState('')
 
   async function handleSave() {
+    const pct = parseFloat(taxaPct.replace(',', '.'))
+    const fixed = parseFloat(taxaFixed.replace(',', '.'))
+    if (isNaN(pct) || isNaN(fixed)) {
+      setError('Valores de taxa inválidos — use ponto como separador decimal (ex: 1.50)')
+      return
+    }
     setSaving(true)
     setError('')
     try {
@@ -929,8 +959,8 @@ function MethodFeeEditor({
         canal: mapping.canal,
         metodo: mapping.metodo,
         provider_id: providerId,
-        taxa_percentual: Math.round((parseFloat(taxaPct) || 0) * 100),
-        taxa_fixa_centavos: Math.round((parseFloat(taxaFixed) || 0) * 100),
+        taxa_percentual: Math.round(pct * 100),
+        taxa_fixa_centavos: Math.round(fixed * 100),
       })
       setSaved(true)
       onSaved()
