@@ -1,74 +1,29 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Check, DollarSign, Edit2, Percent, Plus, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
 import { api } from '@/lib/api'
-
-// ── Types ──────────────────────────────────────────────────────────────────
-
-interface CostCenter {
-  id: string
-  nome: string
-  descricao: string | null
-  ativo: boolean
-}
-
-interface CostItem {
-  id: string
-  cost_center_id: string
-  nome: string
-  tipo: 'FIXO' | 'VARIAVEL'
-  valor_centavos: number | null
-  percentual_bps: number | null
-  descricao: string | null
-  ativo: boolean
-}
-
-interface CenterSummary {
-  total_fixo_centavos: number
-  total_variavel_bps: number
-}
-
-// ── Helpers ────────────────────────────────────────────────────────────────
-
-function extractError(err: unknown): string {
-  const msg = (err as { response?: { data?: { message?: string | string[] } } }).response?.data
-    ?.message
-  return typeof msg === 'string' ? msg : Array.isArray(msg) ? msg[0] : 'Erro ao salvar'
-}
-
-function fmtBrl(cents: number) {
-  return `R$ ${(cents / 100).toFixed(2).replace('.', ',')}`
-}
-
-function fmtPct(bps: number) {
-  return `${(bps / 100).toFixed(2).replace('.', ',')}%`
-}
-
-interface ItemFormState {
-  nome: string
-  tipo: 'FIXO' | 'VARIAVEL'
-  valor: string
-  descricao: string
-}
-
-function buildItemForm(item?: CostItem): ItemFormState {
-  if (!item) return { nome: '', tipo: 'FIXO', valor: '', descricao: '' }
-  return {
-    nome: item.nome,
-    tipo: item.tipo,
-    valor:
-      item.tipo === 'FIXO'
-        ? ((item.valor_centavos ?? 0) / 100).toFixed(2)
-        : ((item.percentual_bps ?? 0) / 100).toFixed(2),
-    descricao: item.descricao ?? '',
-  }
-}
-
-// ── Component ──────────────────────────────────────────────────────────────
+import {
+  buildItemForm,
+  extractError,
+  fmtBrl,
+  fmtPct,
+  type CenterSummary,
+  type CostCenter,
+  type CostItem,
+  type ItemFormState,
+} from './utils'
 
 export function EditarCentroCustoPage() {
   const { id } = useParams<{ id: string }>()
@@ -83,6 +38,7 @@ export function EditarCentroCustoPage() {
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
   const [saveSuccess, setSaveSuccess] = useState(false)
+  const saveSuccessTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const [items, setItems] = useState<CostItem[]>([])
   const [summary, setSummary] = useState<CenterSummary | null>(null)
@@ -94,7 +50,15 @@ export function EditarCentroCustoPage() {
   const [itemForm, setItemForm] = useState<ItemFormState>(buildItemForm())
   const [savingItem, setSavingItem] = useState(false)
   const [itemFormError, setItemFormError] = useState('')
+
+  const [deleteItemTarget, setDeleteItemTarget] = useState<CostItem | null>(null)
   const [deletingItemId, setDeletingItemId] = useState<string | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (saveSuccessTimer.current) clearTimeout(saveSuccessTimer.current)
+    }
+  }, [])
 
   // ── Load ───────────────────────────────────────────────────────────────
 
@@ -126,9 +90,12 @@ export function EditarCentroCustoPage() {
         setDescricao(data.descricao ?? '')
         loadItems(id)
       })
-      .catch(() => setLoadError('Centro de custo não encontrado'))
+      .catch(() => {
+        setLoadError('Centro de custo não encontrado')
+        navigate('/centro-custo', { replace: true })
+      })
       .finally(() => setLoadingCenter(false))
-  }, [id, loadItems])
+  }, [id, loadItems, navigate])
 
   // ── Save center ────────────────────────────────────────────────────────
 
@@ -149,7 +116,7 @@ export function EditarCentroCustoPage() {
         prev ? { ...prev, nome: nome.trim(), descricao: descricao.trim() || null } : prev,
       )
       setSaveSuccess(true)
-      setTimeout(() => setSaveSuccess(false), 3000)
+      saveSuccessTimer.current = setTimeout(() => setSaveSuccess(false), 3000)
     } catch (err) {
       setSaveError(extractError(err))
     } finally {
@@ -236,17 +203,19 @@ export function EditarCentroCustoPage() {
 
   // ── Delete item ────────────────────────────────────────────────────────
 
-  async function deleteItem(item: CostItem) {
-    if (!id) return
-    setDeletingItemId(item.id)
+  async function confirmDeleteItem() {
+    if (!id || !deleteItemTarget) return
+    setDeletingItemId(deleteItemTarget.id)
     setItemsError('')
     try {
-      await api.delete(`/cost-centers/${id}/items/${item.id}`)
-      setItems((prev) => prev.filter((i) => i.id !== item.id))
+      await api.delete(`/cost-centers/${id}/items/${deleteItemTarget.id}`)
+      setItems((prev) => prev.filter((i) => i.id !== deleteItemTarget.id))
       const { data: sum } = await api.get<CenterSummary>(`/cost-centers/${id}/summary`)
       setSummary(sum)
+      setDeleteItemTarget(null)
     } catch {
       setItemsError('Erro ao excluir item')
+      setDeleteItemTarget(null)
     } finally {
       setDeletingItemId(null)
     }
@@ -263,15 +232,7 @@ export function EditarCentroCustoPage() {
   }
 
   if (loadError || !center) {
-    return (
-      <div className="space-y-4">
-        <Button variant="ghost" size="sm" onClick={() => navigate('/centro-custo')} className="gap-1.5 text-muted-foreground">
-          <ArrowLeft className="h-4 w-4" />
-          Voltar
-        </Button>
-        <p className="text-sm text-destructive">{loadError || 'Centro de custo não encontrado'}</p>
-      </div>
-    )
+    return null
   }
 
   return (
@@ -512,7 +473,7 @@ export function EditarCentroCustoPage() {
                     <Button
                       size="sm"
                       variant="ghost"
-                      onClick={() => deleteItem(item)}
+                      onClick={() => setDeleteItemTarget(item)}
                       disabled={deletingItemId === item.id}
                       className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
                       title="Excluir item"
@@ -526,6 +487,37 @@ export function EditarCentroCustoPage() {
           )}
         </div>
       </div>
+
+      {/* Delete item confirmation dialog */}
+      <Dialog
+        open={deleteItemTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteItemTarget(null)
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Excluir item de custo</DialogTitle>
+            <DialogDescription>
+              Tem certeza que deseja excluir{' '}
+              <span className="font-medium text-foreground">{deleteItemTarget?.nome}</span>? Esta
+              ação não pode ser desfeita.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteItemTarget(null)}>
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={confirmDeleteItem}
+              disabled={deletingItemId !== null}
+            >
+              {deletingItemId ? 'Excluindo...' : 'Excluir'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -13,22 +13,9 @@ import {
 } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
 import { api } from '@/lib/api'
-
-// ── Types ──────────────────────────────────────────────────────────────────
-
-interface CostCenter {
-  id: string
-  nome: string
-  descricao: string | null
-  ativo: boolean
-  created_at: string
-}
-
-// ── Constants ──────────────────────────────────────────────────────────────
+import type { CostCenter } from './utils'
 
 const LIMIT = 20
-
-// ── Component ──────────────────────────────────────────────────────────────
 
 export function CentroCustoPage() {
   const navigate = useNavigate()
@@ -45,8 +32,6 @@ export function CentroCustoPage() {
   const [deleteTarget, setDeleteTarget] = useState<CostCenter | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
-
-  // ── Load ───────────────────────────────────────────────────────────────
 
   const loadCenters = useCallback(async () => {
     setLoading(true)
@@ -68,8 +53,6 @@ export function CentroCustoPage() {
     loadCenters()
   }, [loadCenters])
 
-  // ── Toggle active ──────────────────────────────────────────────────────
-
   async function toggleCenter(center: CostCenter) {
     if (togglingId) return
     setTogglingId(center.id)
@@ -85,8 +68,6 @@ export function CentroCustoPage() {
       setTogglingId(null)
     }
   }
-
-  // ── Delete ─────────────────────────────────────────────────────────────
 
   async function confirmDelete() {
     if (!deleteTarget) return
@@ -105,13 +86,10 @@ export function CentroCustoPage() {
     }
   }
 
-  // ── Render ─────────────────────────────────────────────────────────────
-
   const totalPages = Math.ceil(total / LIMIT)
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-foreground">Centro de Custo</h1>
@@ -125,14 +103,12 @@ export function CentroCustoPage() {
         </Button>
       </div>
 
-      {/* Errors */}
       {(listError ?? toggleError ?? deleteError) && (
         <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
           {listError ?? toggleError ?? deleteError}
         </div>
       )}
 
-      {/* Table */}
       <div className="rounded-lg border border-border bg-card shadow-sm overflow-hidden">
         <table className="w-full text-sm">
           <thead>
@@ -264,8 +240,12 @@ export function CentroCustoPage() {
         )}
       </div>
 
-      {/* Delete confirmation dialog */}
-      <Dialog open={deleteTarget !== null} onOpenChange={(open) => { if (!open) setDeleteTarget(null) }}>
+      <Dialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null)
+        }}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Excluir centro de custo</DialogTitle>
@@ -279,11 +259,7 @@ export function CentroCustoPage() {
             <Button variant="outline" onClick={() => setDeleteTarget(null)}>
               Cancelar
             </Button>
-            <Button
-              variant="destructive"
-              onClick={confirmDelete}
-              disabled={deletingId !== null}
-            >
+            <Button variant="destructive" onClick={confirmDelete} disabled={deletingId !== null}>
               {deletingId ? 'Excluindo...' : 'Excluir'}
             </Button>
           </DialogFooter>
