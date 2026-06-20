@@ -51,7 +51,8 @@ export class PricingInputDto {
   custo_operacional_variavel_bps?: number = 0;
 
   @ApiPropertyOptional({
-    description: 'Taxa de cartão em basis points (ex: 250 = 2,50%)',
+    description:
+      'Taxa de cartão/gateway em basis points (ex: 250 = 2,50%). Incide sobre o preço de venda.',
     default: 0,
     example: 250,
   })
@@ -61,7 +62,20 @@ export class PricingInputDto {
   taxa_cartao_bps?: number = 0;
 
   @ApiPropertyOptional({
-    description: 'Margem desejada em basis points (0–9999; ex: 3000 = 30,00%)',
+    description:
+      'Comissão do vendedor em basis points (ex: 500 = 5,00%). Incide sobre o preço de venda.',
+    default: 0,
+    example: 500,
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  comissao_bps?: number = 0;
+
+  @ApiPropertyOptional({
+    description:
+      'Margem de lucro desejada em basis points (0–9999; ex: 3000 = 30,00%). ' +
+      'A soma de todas as despesas variáveis (impostos + cartão + comissão + custos variáveis) + margem deve ser < 100%.',
     default: 0,
     example: 3000,
   })
