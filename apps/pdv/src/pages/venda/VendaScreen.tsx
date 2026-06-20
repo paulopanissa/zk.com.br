@@ -145,6 +145,9 @@ export function VendaScreen({
 
       {/* Mobile: bottom sheet do carrinho */}
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Carrinho"
         className={cn(
           'md:hidden fixed inset-x-0 bottom-0 z-50 flex flex-col max-h-[88vh] rounded-t-3xl bg-card shadow-2xl transition-transform duration-300 ease-out',
           cartOpen ? 'translate-y-0' : 'translate-y-full',

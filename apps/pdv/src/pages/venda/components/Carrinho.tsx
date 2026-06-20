@@ -122,7 +122,7 @@ export function Carrinho({
                   <button
                     type="button"
                     onClick={() => onRemove(item.id)}
-                    className="flex h-6 w-6 items-center justify-center text-muted-foreground hover:text-destructive transition-colors"
+                    className="flex h-9 w-9 items-center justify-center text-muted-foreground hover:text-destructive transition-colors"
                     aria-label="Remover item"
                   >
                     <Trash2 className="h-3.5 w-3.5" />

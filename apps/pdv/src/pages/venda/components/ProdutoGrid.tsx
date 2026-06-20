@@ -115,23 +115,25 @@ export function ProdutoGrid({ onAddProduto, onShowVideo }: ProdutoGridProps) {
                       : 'border-border bg-card hover:border-primary hover:shadow-md active:scale-[0.97] cursor-pointer',
                   )}
                 >
-                  {/* Área de imagem */}
+                  {/* Área de imagem — emoji sempre presente como fallback */}
                   <div className="relative w-full aspect-[4/3] overflow-hidden">
-                    {p.imagemUrl ? (
+                    <div
+                      className={cn(
+                        'w-full h-full flex items-center justify-center text-4xl',
+                        catMeta.bg,
+                      )}
+                    >
+                      {catMeta.emoji}
+                    </div>
+                    {p.imagemUrl && (
                       <img
                         src={p.imagemUrl}
                         alt={p.nome}
-                        className="w-full h-full object-cover"
+                        className="absolute inset-0 w-full h-full object-cover"
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none'
+                        }}
                       />
-                    ) : (
-                      <div
-                        className={cn(
-                          'w-full h-full flex items-center justify-center text-4xl',
-                          catMeta.bg,
-                        )}
-                      >
-                        {catMeta.emoji}
-                      </div>
                     )}
 
                     {/* Sem estoque overlay */}
