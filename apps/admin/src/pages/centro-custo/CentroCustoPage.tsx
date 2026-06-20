@@ -109,7 +109,7 @@ export function CentroCustoPage() {
   const totalPages = Math.ceil(total / LIMIT)
 
   return (
-    <div className="space-y-6">
+    <div className="p-6 space-y-5">
       {/* Page header */}
       <div className="flex items-center justify-between">
         <div>
