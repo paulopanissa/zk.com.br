@@ -384,7 +384,8 @@ export function PricingCalculator({
       }))
       setHints((h) => ({ ...h, custo_fixo: 'auto', custo_variavel: 'auto' }))
     } catch {
-      // ignore
+      setCalcError('Não foi possível carregar o centro de custo selecionado')
+      setSelectedCcId('')
     }
     setResult(null)
   }
