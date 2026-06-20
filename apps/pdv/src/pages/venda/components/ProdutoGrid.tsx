@@ -1,17 +1,18 @@
 import { useState } from 'react'
-import { Search, Plus } from 'lucide-react'
+import { Search, Plus, Play } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
-import { PRODUTOS_PDV, formatBRL, type ProdutoPDV } from '@/data/produtos.mock'
+import { PRODUTOS_PDV, CATEGORIA_META, formatBRL, type ProdutoPDV } from '@/data/produtos.mock'
 
 interface ProdutoGridProps {
   onAddProduto: (produto: ProdutoPDV) => void
+  onShowVideo?: (produto: ProdutoPDV) => void
 }
 
 const CATEGORIAS = ['Todos', ...Array.from(new Set(PRODUTOS_PDV.map((p) => p.categoria))).sort()]
 
-export function ProdutoGrid({ onAddProduto }: ProdutoGridProps) {
+export function ProdutoGrid({ onAddProduto, onShowVideo }: ProdutoGridProps) {
   const [busca, setBusca] = useState('')
   const [categoria, setCategoria] = useState('Todos')
 
@@ -27,32 +28,60 @@ export function ProdutoGrid({ onAddProduto }: ProdutoGridProps) {
     <div className="flex h-full flex-col gap-3 p-3">
       {/* Busca */}
       <div className="relative">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
         <Input
           placeholder="Buscar produto ou SKU..."
           value={busca}
           onChange={(e) => setBusca(e.target.value)}
-          className="pl-9 h-10 bg-card"
+          className="pl-9 h-11 bg-card text-base"
         />
       </div>
 
-      {/* Filtros de categoria */}
-      <div className="flex flex-wrap gap-1.5">
-        {CATEGORIAS.map((cat) => (
-          <button
-            key={cat}
-            type="button"
-            onClick={() => setCategoria(cat)}
-            className={cn(
-              'rounded-full px-3 py-1 text-xs font-medium border transition-colors',
-              categoria === cat
-                ? 'bg-primary text-primary-foreground border-primary'
-                : 'border-border text-muted-foreground hover:border-primary hover:text-foreground bg-card',
-            )}
-          >
-            {cat}
-          </button>
-        ))}
+      {/* Filtro visual por categoria — scroll horizontal */}
+      <div
+        className="overflow-x-auto"
+        style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+      >
+        <div className="flex gap-2 pb-0.5" style={{ width: 'max-content' }}>
+          {CATEGORIAS.map((cat) => {
+            const meta = CATEGORIA_META[cat] ?? {
+              emoji: '📦',
+              bg: 'bg-muted',
+              text: 'text-muted-foreground',
+            }
+            const ativo = categoria === cat
+            return (
+              <button
+                key={cat}
+                type="button"
+                onClick={() => setCategoria(cat)}
+                className={cn(
+                  'flex flex-col items-center gap-1.5 rounded-2xl border px-3 pt-2.5 pb-2 min-w-[64px] transition-all',
+                  ativo
+                    ? 'border-primary bg-primary shadow-sm shadow-primary/20'
+                    : 'border-border bg-card hover:border-primary/60',
+                )}
+              >
+                <div
+                  className={cn(
+                    'h-9 w-9 rounded-xl flex items-center justify-center text-xl',
+                    ativo ? 'bg-primary-foreground/15' : meta.bg,
+                  )}
+                >
+                  {meta.emoji}
+                </div>
+                <span
+                  className={cn(
+                    'text-[11px] font-medium whitespace-nowrap leading-none',
+                    ativo ? 'text-primary-foreground' : 'text-muted-foreground',
+                  )}
+                >
+                  {cat}
+                </span>
+              </button>
+            )
+          })}
+        </div>
       </div>
 
       {/* Grid de produtos */}
@@ -62,10 +91,16 @@ export function ProdutoGrid({ onAddProduto }: ProdutoGridProps) {
             Nenhum produto encontrado
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-2 pb-2 xl:grid-cols-3">
+          <div className="grid grid-cols-2 gap-2 pb-24 sm:grid-cols-3 xl:grid-cols-4">
             {filtrados.map((p) => {
               const semEstoque = p.estoqueDisponivel === 0
               const estoqueMinimo = p.estoqueDisponivel > 0 && p.estoqueDisponivel <= 5
+              const catMeta = CATEGORIA_META[p.categoria] ?? {
+                emoji: '📦',
+                bg: 'bg-muted',
+                text: 'text-muted-foreground',
+              }
+              const temVideo = Boolean(p.videoUrl)
 
               return (
                 <button
@@ -74,36 +109,88 @@ export function ProdutoGrid({ onAddProduto }: ProdutoGridProps) {
                   disabled={semEstoque}
                   onClick={() => !semEstoque && onAddProduto(p)}
                   className={cn(
-                    'group relative flex flex-col items-start rounded-xl border p-3 text-left transition-all',
+                    'group relative flex flex-col rounded-2xl border text-left transition-all overflow-hidden',
                     semEstoque
                       ? 'border-border bg-card opacity-50 cursor-not-allowed'
-                      : 'border-border bg-card hover:border-primary hover:shadow-md cursor-pointer active:scale-[0.98]',
+                      : 'border-border bg-card hover:border-primary hover:shadow-md active:scale-[0.97] cursor-pointer',
                   )}
                 >
-                  {/* Ícone + */}
-                  {!semEstoque && (
-                    <div className="absolute right-2 top-2 flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-primary opacity-0 transition-opacity group-hover:opacity-100">
-                      <Plus className="h-3 w-3" />
+                  {/* Área de imagem — emoji sempre presente como fallback */}
+                  <div className="relative w-full aspect-[4/3] overflow-hidden">
+                    <div
+                      className={cn(
+                        'w-full h-full flex items-center justify-center text-4xl',
+                        catMeta.bg,
+                      )}
+                    >
+                      {catMeta.emoji}
                     </div>
-                  )}
+                    {p.imagemUrl && (
+                      <img
+                        src={p.imagemUrl}
+                        alt={p.nome}
+                        className="absolute inset-0 w-full h-full object-cover"
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none'
+                        }}
+                      />
+                    )}
 
-                  <span className="font-mono text-[10px] text-muted-foreground">{p.sku}</span>
-                  <span className="mt-1 line-clamp-2 text-sm font-medium text-foreground leading-snug">
-                    {p.nome}
-                  </span>
-                  <div className="mt-2 flex w-full items-center justify-between">
-                    <span className="text-base font-bold tabular-nums text-primary">
-                      {formatBRL(p.precoCentavos)}
+                    {/* Sem estoque overlay */}
+                    {semEstoque && (
+                      <div className="absolute inset-0 bg-background/50 flex items-center justify-center">
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] border-destructive/40 text-destructive bg-background"
+                        >
+                          Sem estoque
+                        </Badge>
+                      </div>
+                    )}
+
+                    {/* Indicador de vídeo */}
+                    {temVideo && onShowVideo && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          onShowVideo(p)
+                        }}
+                        className="absolute bottom-2 left-2 flex items-center gap-1 rounded-full bg-black/60 px-2.5 py-1 text-white text-[10px] font-medium hover:bg-black/80 transition-colors"
+                        aria-label="Ver vídeo do produto"
+                      >
+                        <Play className="h-2.5 w-2.5 fill-white stroke-none" />
+                        Vídeo
+                      </button>
+                    )}
+
+                    {/* Add indicator — hover/focus */}
+                    {!semEstoque && (
+                      <div className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground opacity-0 transition-opacity group-hover:opacity-100 shadow-sm">
+                        <Plus className="h-3.5 w-3.5" />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Informações do produto */}
+                  <div className="flex flex-col gap-0.5 p-2.5">
+                    <span className="font-mono text-[10px] text-muted-foreground">{p.sku}</span>
+                    <span className="line-clamp-2 text-sm font-medium text-foreground leading-snug">
+                      {p.nome}
                     </span>
-                    {semEstoque ? (
-                      <Badge variant="outline" className="text-[10px] border-destructive/40 text-destructive">
-                        Sem estoque
-                      </Badge>
-                    ) : estoqueMinimo ? (
-                      <Badge variant="outline" className="text-[10px] border-warning/40 text-warning">
-                        Últ. {p.estoqueDisponivel}
-                      </Badge>
-                    ) : null}
+                    <div className="mt-1.5 flex w-full items-center justify-between gap-1">
+                      <span className="text-base font-bold tabular-nums text-primary">
+                        {formatBRL(p.precoCentavos)}
+                      </span>
+                      {estoqueMinimo && (
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] border-warning/40 text-warning shrink-0"
+                        >
+                          Últ. {p.estoqueDisponivel}
+                        </Badge>
+                      )}
+                    </div>
                   </div>
                 </button>
               )

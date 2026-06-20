@@ -1,4 +1,4 @@
-import { Trash2, Minus, Plus, ShoppingCart, Tag } from 'lucide-react'
+import { Trash2, Minus, Plus, ShoppingCart, Tag, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn, formatBRL } from '@/lib/utils'
@@ -24,6 +24,7 @@ interface CarrinhoProps {
   descontoCentavos: number
   onDescontoTipoChange: (tipo: DescontoTipo) => void
   onDescontoInputChange: (value: string) => void
+  onClose?: () => void
 }
 
 export function Carrinho({
@@ -37,6 +38,7 @@ export function Carrinho({
   descontoCentavos,
   onDescontoTipoChange,
   onDescontoInputChange,
+  onClose,
 }: CarrinhoProps) {
   const totalItens = items.reduce((acc, i) => acc + i.quantidade, 0)
   const totalCentavos = subtotalCentavos - descontoCentavos
@@ -48,11 +50,22 @@ export function Carrinho({
         <div className="flex items-center gap-2">
           <ShoppingCart className="h-4 w-4 text-muted-foreground" />
           <span className="font-display font-bold text-foreground">Carrinho</span>
+          {items.length > 0 && (
+            <span className="text-xs text-muted-foreground">
+              {totalItens} item{totalItens !== 1 ? 's' : ''}
+            </span>
+          )}
         </div>
-        {items.length > 0 && (
-          <span className="text-xs text-muted-foreground">
-            {totalItens} item{totalItens !== 1 ? 's' : ''}
-          </span>
+        {/* Botão fechar — visível apenas no modo mobile (bottom sheet) */}
+        {onClose && (
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+            aria-label="Fechar carrinho"
+          >
+            <X className="h-4 w-4" />
+          </button>
         )}
       </div>
 
@@ -82,7 +95,8 @@ export function Carrinho({
                   <button
                     type="button"
                     onClick={() => onUpdateQty(item.id, -1)}
-                    className="flex h-7 w-7 items-center justify-center rounded-lg border border-border bg-background text-muted-foreground hover:border-primary hover:text-primary transition-colors"
+                    className="flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-background text-muted-foreground hover:border-primary hover:text-primary transition-colors"
+                    aria-label="Diminuir quantidade"
                   >
                     <Minus className="h-3 w-3" />
                   </button>
@@ -93,7 +107,8 @@ export function Carrinho({
                     type="button"
                     disabled={item.quantidade >= item.maxQuantidade}
                     onClick={() => onUpdateQty(item.id, +1)}
-                    className="flex h-7 w-7 items-center justify-center rounded-lg border border-border bg-background text-muted-foreground hover:border-primary hover:text-primary transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-background text-muted-foreground hover:border-primary hover:text-primary transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    aria-label="Aumentar quantidade"
                   >
                     <Plus className="h-3 w-3" />
                   </button>
@@ -107,7 +122,8 @@ export function Carrinho({
                   <button
                     type="button"
                     onClick={() => onRemove(item.id)}
-                    className="text-muted-foreground hover:text-destructive transition-colors"
+                    className="flex h-9 w-9 items-center justify-center text-muted-foreground hover:text-destructive transition-colors"
+                    aria-label="Remover item"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
@@ -129,7 +145,7 @@ export function Carrinho({
             </div>
           )}
 
-          {/* Campo de desconto (só quando carrinho não está vazio) */}
+          {/* Campo de desconto */}
           {items.length > 0 && (
             <div className="flex items-center gap-2">
               <label htmlFor="desconto-input" className="flex items-center gap-1 shrink-0">
