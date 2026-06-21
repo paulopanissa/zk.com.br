@@ -209,6 +209,7 @@ interface CostCenterWithItems {
 }
 
 interface CalcFields {
+  quantidade: string
   impostos: string
   taxa_cartao: string
   frete: string
@@ -328,6 +329,7 @@ export function PricingCalculator({
 }) {
   const [open, setOpen] = useState(false)
   const [fields, setFields] = useState<CalcFields>({
+    quantidade: '1',
     impostos: '',
     taxa_cartao: '',
     frete: '',
@@ -341,13 +343,18 @@ export function PricingCalculator({
   const [calculating, setCalculating] = useState(false)
   const [calcError, setCalcError] = useState('')
 
-  // Cost centers
   const [costCenters, setCostCenters] = useState<CostCenter[]>([])
   const [selectedCcId, setSelectedCcId] = useState('')
-
-  // Payment methods
   const [methods, setMethods] = useState<MethodMapping[]>([])
   const [selectedMethod, setSelectedMethod] = useState('')
+
+  const qty = Math.max(1, Math.floor(parseFloat(fields.quantidade) || 1))
+  const freteUnit = qty > 1 && parseFloat(fields.frete) > 0
+    ? (parseFloat(fields.frete) / qty).toFixed(2)
+    : null
+  const custoFixoUnit = qty > 1 && parseFloat(fields.custo_fixo) > 0
+    ? (parseFloat(fields.custo_fixo) / qty).toFixed(2)
+    : null
 
   useEffect(() => {
     if (!open) return
@@ -425,11 +432,14 @@ export function PricingCalculator({
     setCalcError('')
     setResult(null)
     try {
+      // frete e custo_fixo são totais da compra — divide pela quantidade para obter o unitário
+      const freteUnitCents = Math.round(cents(fields.frete) / qty)
+      const custoFixoUnitCents = Math.round(cents(fields.custo_fixo) / qty)
       const { data } = await api.post<CalcResult>('/pricing-engine/calculate', {
         preco_custo_centavos: costCents,
         impostos_bps: bps(fields.impostos),
-        frete_centavos: cents(fields.frete),
-        custo_operacional_centavos: cents(fields.custo_fixo),
+        frete_centavos: freteUnitCents,
+        custo_operacional_centavos: custoFixoUnitCents,
         custo_operacional_variavel_bps: bps(fields.custo_variavel),
         taxa_cartao_bps: bps(fields.taxa_cartao),
         comissao_bps: bps(fields.comissao),
@@ -463,7 +473,7 @@ export function PricingCalculator({
       </button>
 
       {open && (
-        <div className="px-5 pb-4 space-y-3">
+        <div className="px-5 pb-4 space-y-4">
           {/* SEBRAE formula note */}
           <div className="flex items-start gap-1.5 rounded-md bg-muted/40 px-3 py-2">
             <Info className="h-3 w-3 text-muted-foreground shrink-0 mt-0.5" />
@@ -474,51 +484,105 @@ export function PricingCalculator({
             </p>
           </div>
 
-          {/* Cost center selector */}
-          {costCenters.length > 0 && (
-            <div className="space-y-1">
-              <span className="text-[10px] font-medium text-muted-foreground">
-                Centro de custo (auto-preenche fixo e variável)
-              </span>
-              <Select value={selectedCcId} onValueChange={handleCcSelect}>
-                <SelectTrigger className="h-7 text-xs">
-                  <SelectValue placeholder="Nenhum" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">Nenhum</SelectItem>
-                  {costCenters.map((cc) => (
-                    <SelectItem key={cc.id} value={cc.id}>
-                      {cc.nome}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          {/* Auto-fill selectors */}
+          {(costCenters.length > 0 || methods.length > 0) && (
+            <div className="space-y-2">
+              {costCenters.length > 0 && (
+                <div className="space-y-1">
+                  <span className="text-[10px] font-medium text-muted-foreground">
+                    Centro de custo
+                  </span>
+                  <Select value={selectedCcId} onValueChange={handleCcSelect}>
+                    <SelectTrigger className="h-7 text-xs">
+                      <SelectValue placeholder="Nenhum" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">Nenhum</SelectItem>
+                      {costCenters.map((cc) => (
+                        <SelectItem key={cc.id} value={cc.id}>
+                          {cc.nome}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              {methods.length > 0 && (
+                <div className="space-y-1">
+                  <span className="text-[10px] font-medium text-muted-foreground">
+                    Método de pagamento
+                  </span>
+                  <Select value={selectedMethod} onValueChange={handleMethodSelect}>
+                    <SelectTrigger className="h-7 text-xs">
+                      <SelectValue placeholder="Nenhum" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">Nenhum</SelectItem>
+                      {methods.map((m) => (
+                        <SelectItem key={m.id} value={m.id}>
+                          {METODO_LABEL[m.metodo] ?? m.metodo} ({m.canal})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
           )}
 
-          {/* Payment method selector */}
-          {methods.length > 0 && (
-            <div className="space-y-1">
-              <span className="text-[10px] font-medium text-muted-foreground">
-                Método de pagamento (auto-preenche taxa do cartão)
-              </span>
-              <Select value={selectedMethod} onValueChange={handleMethodSelect}>
-                <SelectTrigger className="h-7 text-xs">
-                  <SelectValue placeholder="Nenhum" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">Nenhum</SelectItem>
-                  {methods.map((m) => (
-                    <SelectItem key={m.id} value={m.id}>
-                      {METODO_LABEL[m.metodo] ?? m.metodo} ({m.canal})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-
+          {/* Section: Custos da compra */}
           <div className="space-y-2">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Custos da compra
+            </p>
+            {/* Quantidade */}
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs text-muted-foreground whitespace-nowrap">Qtd. comprada</span>
+              <Input
+                type="number"
+                min="1"
+                step="1"
+                value={fields.quantidade}
+                onChange={(e) => setF('quantidade', e.target.value)}
+                className="h-7 text-xs w-24 shrink-0"
+              />
+            </div>
+            {/* Frete */}
+            <div className="space-y-0.5">
+              <CalcRow
+                label="Frete total"
+                unit="R$"
+                value={fields.frete}
+                onChange={(v) => setF('frete', v)}
+              />
+              {freteUnit && (
+                <p className="text-[10px] text-primary/70 text-right pr-1">
+                  R$ {freteUnit.replace('.', ',')} / unidade
+                </p>
+              )}
+            </div>
+            {/* Custo fixo */}
+            <div className="space-y-0.5">
+              <CalcRow
+                label="Custo fixo total"
+                unit="R$"
+                value={fields.custo_fixo}
+                onChange={(v) => { setF('custo_fixo', v); setSelectedCcId('') }}
+                hint={hints.custo_fixo}
+              />
+              {custoFixoUnit && (
+                <p className="text-[10px] text-primary/70 text-right pr-1">
+                  R$ {custoFixoUnit.replace('.', ',')} / unidade
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Section: Despesas variáveis */}
+          <div className="space-y-2">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Despesas variáveis (% sobre PV)
+            </p>
             <CalcRow
               label="Impostos"
               unit="%"
@@ -539,32 +603,21 @@ export function PricingCalculator({
               onChange={(v) => setF('comissao', v)}
             />
             <CalcRow
-              label="Frete de compra"
-              unit="R$"
-              value={fields.frete}
-              onChange={(v) => setF('frete', v)}
-            />
-            <CalcRow
-              label="Custo fixo rateado"
-              unit="R$"
-              value={fields.custo_fixo}
-              onChange={(v) => { setF('custo_fixo', v); setSelectedCcId('') }}
-              hint={hints.custo_fixo}
-            />
-            <CalcRow
               label="Custo variável"
               unit="%"
               value={fields.custo_variavel}
               onChange={(v) => { setF('custo_variavel', v); setSelectedCcId('') }}
               hint={hints.custo_variavel}
             />
-            <CalcRow
-              label="Margem desejada"
-              unit="%"
-              value={fields.margem}
-              onChange={(v) => setF('margem', v)}
-            />
           </div>
+
+          {/* Margem */}
+          <CalcRow
+            label="Margem desejada"
+            unit="%"
+            value={fields.margem}
+            onChange={(v) => setF('margem', v)}
+          />
 
           {calcError && <p className="text-xs text-destructive">{calcError}</p>}
 
@@ -581,6 +634,9 @@ export function PricingCalculator({
 
           {result && (
             <div className="rounded-md border border-border bg-muted/20 px-3 py-3 space-y-1.5">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">
+                Resultado por unidade
+              </p>
               <BreakdownRow
                 label="Custo base (compra + frete + fixo)"
                 cents={result.breakdown.custo_base_centavos}
