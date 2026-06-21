@@ -492,12 +492,15 @@ export function PricingCalculator({
                   <span className="text-[10px] font-medium text-muted-foreground">
                     Centro de custo
                   </span>
-                  <Select value={selectedCcId} onValueChange={handleCcSelect}>
+                  <Select
+                    value={selectedCcId || '__none__'}
+                    onValueChange={(v) => handleCcSelect(v === '__none__' ? '' : v)}
+                  >
                     <SelectTrigger className="h-7 text-xs">
                       <SelectValue placeholder="Nenhum" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Nenhum</SelectItem>
+                      <SelectItem value="__none__">Nenhum</SelectItem>
                       {costCenters.map((cc) => (
                         <SelectItem key={cc.id} value={cc.id}>
                           {cc.nome}
@@ -512,12 +515,15 @@ export function PricingCalculator({
                   <span className="text-[10px] font-medium text-muted-foreground">
                     Método de pagamento
                   </span>
-                  <Select value={selectedMethod} onValueChange={handleMethodSelect}>
+                  <Select
+                    value={selectedMethod || '__none__'}
+                    onValueChange={(v) => handleMethodSelect(v === '__none__' ? '' : v)}
+                  >
                     <SelectTrigger className="h-7 text-xs">
                       <SelectValue placeholder="Nenhum" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Nenhum</SelectItem>
+                      <SelectItem value="__none__">Nenhum</SelectItem>
                       {methods.map((m) => (
                         <SelectItem key={m.id} value={m.id}>
                           {METODO_LABEL[m.metodo] ?? m.metodo} ({m.canal})
