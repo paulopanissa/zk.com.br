@@ -200,6 +200,7 @@ interface MethodMapping {
 
 interface CostCenterWithItems {
   id: string
+  faturamento_mensal_centavos?: number | null
   items: Array<{
     tipo: 'FIXO' | 'VARIAVEL'
     ativo: boolean
@@ -217,6 +218,7 @@ interface CalcFields {
   custo_variavel: string
   comissao: string
   margem: string
+  faturamento_mensal: string
 }
 
 interface CalcBreakdown {
@@ -337,8 +339,11 @@ export function PricingCalculator({
     custo_variavel: '',
     comissao: '',
     margem: '',
+    faturamento_mensal: '',
   })
-  const [hints, setHints] = useState<{ custo_fixo?: string; custo_variavel?: string; taxa_cartao?: string }>({})
+  const [hints, setHints] = useState<{ custo_fixo?: string; custo_variavel?: string; taxa_cartao?: string; faturamento_mensal?: string }>({})
+  // Armazena o total de custos fixos mensais do CC para reprocessar a alocação SEBRAE
+  const [rawTotalFixoCents, setRawTotalFixoCents] = useState<number | null>(null)
   const [result, setResult] = useState<CalcResult | null>(null)
   const [calculating, setCalculating] = useState(false)
   const [calcError, setCalcError] = useState('')
@@ -371,25 +376,48 @@ export function PricingCalculator({
   async function handleCcSelect(id: string) {
     setSelectedCcId(id)
     if (!id) {
-      setFields((f) => ({ ...f, custo_fixo: '', custo_variavel: '' }))
-      setHints((h) => ({ ...h, custo_fixo: undefined, custo_variavel: undefined }))
+      setFields((f) => ({ ...f, custo_fixo: '', custo_variavel: '', faturamento_mensal: '' }))
+      setHints((h) => ({ ...h, custo_fixo: undefined, custo_variavel: undefined, faturamento_mensal: undefined }))
+      setRawTotalFixoCents(null)
       return
     }
     try {
       const { data } = await api.get<CostCenterWithItems>(`/cost-centers/${id}`)
       const items = data.items ?? []
-      const fixo = items
+
+      const totalFixoCents = items
         .filter((i) => i.ativo && i.tipo === 'FIXO')
         .reduce((s, i) => s + (i.valor_centavos ?? 0), 0)
       const variavel = items
         .filter((i) => i.ativo && i.tipo === 'VARIAVEL')
         .reduce((s, i) => s + (i.percentual_bps ?? 0), 0)
+
+      setRawTotalFixoCents(totalFixoCents)
+
+      // Alocação SEBRAE: custo_fixo_unit = total_fixo × preco_custo / faturamento_mensal
+      const faturamentoCents = data.faturamento_mensal_centavos ?? null
+      const precoCustoCents = Math.round((parseFloat(costPriceStr) || 0) * 100)
+      let custoFixoUnitBrl = ''
+      if (faturamentoCents && faturamentoCents > 0 && precoCustoCents > 0) {
+        const allocated = Math.round((totalFixoCents * precoCustoCents) / faturamentoCents)
+        custoFixoUnitBrl = (allocated / 100).toFixed(2)
+      } else {
+        // Sem faturamento cadastrado: exibe total bruto e avisa que precisa alocar
+        custoFixoUnitBrl = (totalFixoCents / 100).toFixed(2)
+      }
+
       setFields((f) => ({
         ...f,
-        custo_fixo: (fixo / 100).toFixed(2),
+        custo_fixo: custoFixoUnitBrl,
         custo_variavel: (variavel / 100).toFixed(2),
+        faturamento_mensal: faturamentoCents ? (faturamentoCents / 100).toFixed(2) : '',
       }))
-      setHints((h) => ({ ...h, custo_fixo: 'auto', custo_variavel: 'auto' }))
+      setHints((h) => ({
+        ...h,
+        custo_fixo: faturamentoCents ? 'SEBRAE' : 'total bruto',
+        custo_variavel: 'auto',
+        faturamento_mensal: faturamentoCents ? 'auto' : undefined,
+      }))
     } catch {
       setCalcError('Não foi possível carregar o centro de custo selecionado')
       setSelectedCcId('')
@@ -411,7 +439,19 @@ export function PricingCalculator({
   }
 
   function setF<K extends keyof CalcFields>(k: K, v: string) {
-    setFields((p) => ({ ...p, [k]: v }))
+    setFields((p) => {
+      const next = { ...p, [k]: v }
+      // Quando faturamento muda e temos total fixo de um CC, reaplica alocação SEBRAE
+      if (k === 'faturamento_mensal' && rawTotalFixoCents !== null) {
+        const faturamentoCents = Math.round((parseFloat(v) || 0) * 100)
+        const precoCustoCents = Math.round((parseFloat(costPriceStr) || 0) * 100)
+        if (faturamentoCents > 0 && precoCustoCents > 0) {
+          const allocated = Math.round((rawTotalFixoCents * precoCustoCents) / faturamentoCents)
+          next.custo_fixo = (allocated / 100).toFixed(2)
+        }
+      }
+      return next
+    })
     setResult(null)
   }
 
@@ -478,9 +518,10 @@ export function PricingCalculator({
           <div className="flex items-start gap-1.5 rounded-md bg-muted/40 px-3 py-2">
             <Info className="h-3 w-3 text-muted-foreground shrink-0 mt-0.5" />
             <p className="text-[10px] text-muted-foreground leading-relaxed">
-              Usa o <strong>mark-up inverso (SEBRAE)</strong>: impostos, cartão, comissão e custos
-              variáveis incidem sobre o preço de venda.{' '}
+              <strong>Mark-up inverso (SEBRAE)</strong>: DV% incide sobre PV.{' '}
               <span className="font-mono">PV = Custo ÷ (1 − DV% − Margem%)</span>
+              {' · '}Custo fixo rateado:{' '}
+              <span className="font-mono">CF_unit = CF_total × Preço ÷ Faturamento</span>
             </p>
           </div>
 
@@ -567,16 +608,29 @@ export function PricingCalculator({
                 </p>
               )}
             </div>
-            {/* Custo fixo */}
+            {/* Faturamento mensal — base para rateio SEBRAE de custos fixos */}
+            <CalcRow
+              label="Faturamento mensal"
+              unit="R$"
+              value={fields.faturamento_mensal}
+              onChange={(v) => setF('faturamento_mensal', v)}
+              hint={hints.faturamento_mensal}
+            />
+            {/* Custo fixo — após rateio SEBRAE */}
             <div className="space-y-0.5">
               <CalcRow
-                label="Custo fixo total"
+                label={rawTotalFixoCents !== null ? 'Custo fixo rateado' : 'Custo fixo unitário'}
                 unit="R$"
                 value={fields.custo_fixo}
-                onChange={(v) => { setF('custo_fixo', v); setSelectedCcId('') }}
+                onChange={(v) => { setF('custo_fixo', v); setSelectedCcId(''); setRawTotalFixoCents(null) }}
                 hint={hints.custo_fixo}
               />
-              {custoFixoUnit && (
+              {rawTotalFixoCents !== null && fields.faturamento_mensal && (
+                <p className="text-[10px] text-primary/70 text-right pr-1">
+                  R$ {(rawTotalFixoCents / 100).toFixed(2).replace('.', ',')} mensal ÷ faturamento
+                </p>
+              )}
+              {custoFixoUnit && rawTotalFixoCents === null && (
                 <p className="text-[10px] text-primary/70 text-right pr-1">
                   R$ {custoFixoUnit.replace('.', ',')} / unidade
                 </p>

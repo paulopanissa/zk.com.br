@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsInt, IsOptional, IsString, MaxLength, Min } from 'class-validator';
 
 export class CreateCostCenterDto {
   @ApiProperty({ example: 'Logística Varejo' })
@@ -11,4 +11,15 @@ export class CreateCostCenterDto {
   @IsString()
   @IsOptional()
   descricao?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Faturamento mensal total da unidade em centavos — usado para rateio proporcional de custos fixos (método SEBRAE). ' +
+      'Ex: faturamento de R$ 4.500/mês → 450000.',
+    example: 450000,
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  faturamento_mensal_centavos?: number;
 }

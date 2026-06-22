@@ -36,6 +36,7 @@ export function EditarCentroCustoPage() {
 
   const [nome, setNome] = useState('')
   const [descricao, setDescricao] = useState('')
+  const [faturamentoMensal, setFaturamentoMensal] = useState('')
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
   const [saveSuccess, setSaveSuccess] = useState(false)
@@ -73,6 +74,11 @@ export function EditarCentroCustoPage() {
         setCenter(data)
         setNome(data.nome)
         setDescricao(data.descricao ?? '')
+        setFaturamentoMensal(
+          data.faturamento_mensal_centavos
+            ? (data.faturamento_mensal_centavos / 100).toFixed(2)
+            : '',
+        )
         setItems(data.items ?? [])
       })
       .catch(() => {
@@ -92,13 +98,26 @@ export function EditarCentroCustoPage() {
     setSaving(true)
     setSaveError('')
     setSaveSuccess(false)
+    const faturamentoNum = parseFloat(faturamentoMensal.replace(',', '.'))
+    const faturamentoCents =
+      faturamentoMensal && !isNaN(faturamentoNum) && faturamentoNum > 0
+        ? Math.round(faturamentoNum * 100)
+        : null
     try {
       await api.patch(`/cost-centers/${id}`, {
         nome: nome.trim(),
         descricao: descricao.trim() || null,
+        faturamento_mensal_centavos: faturamentoCents,
       })
       setCenter((prev) =>
-        prev ? { ...prev, nome: nome.trim(), descricao: descricao.trim() || null } : prev,
+        prev
+          ? {
+              ...prev,
+              nome: nome.trim(),
+              descricao: descricao.trim() || null,
+              faturamento_mensal_centavos: faturamentoCents,
+            }
+          : prev,
       )
       setSaveSuccess(true)
       saveSuccessTimer.current = setTimeout(() => setSaveSuccess(false), 3000)
@@ -268,6 +287,28 @@ export function EditarCentroCustoPage() {
                 rows={3}
                 className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring resize-none"
               />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-foreground">
+                Faturamento mensal{' '}
+                <span className="text-xs font-normal text-muted-foreground">(opcional)</span>
+              </label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">R$</span>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={faturamentoMensal}
+                  onChange={(e) => setFaturamentoMensal(e.target.value)}
+                  placeholder="4500,00"
+                  className="pl-9"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Receita total mensal da unidade — usada para rateio proporcional de custos fixos na calculadora de preço (método SEBRAE).
+              </p>
             </div>
 
             {saveError && <p className="text-sm text-destructive">{saveError}</p>}

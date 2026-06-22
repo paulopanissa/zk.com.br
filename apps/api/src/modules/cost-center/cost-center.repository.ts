@@ -70,7 +70,12 @@ export class CostCenterRepository {
     });
   }
 
-  create(data: { unidade_id: string; nome: string; descricao?: string }): Promise<CostCenter> {
+  create(data: {
+    unidade_id: string;
+    nome: string;
+    descricao?: string;
+    faturamento_mensal_centavos?: number | null;
+  }): Promise<CostCenter> {
     return this.prisma.costCenter.create({ data });
   }
 
