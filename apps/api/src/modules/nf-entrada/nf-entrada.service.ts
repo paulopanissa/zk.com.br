@@ -339,6 +339,28 @@ export class NfEntradaService {
           },
           update: {},
         });
+
+        // Atualiza preço de custo do produto a partir da NF (apenas se ainda não definido)
+        if (item.valor_unitario > 0) {
+          const pricing = await tx.productPricing.findUnique({
+            where: { product_id: item.product_id! },
+            select: { cost_price_cents: true, sale_price_cents: true },
+          });
+          if (pricing && pricing.cost_price_cents === 0) {
+            const newCost = item.valor_unitario;
+            const sale = pricing.sale_price_cents;
+            const marginCents = sale - newCost;
+            const marginPct = sale > 0 ? (marginCents / sale) * 100 : 0;
+            await tx.productPricing.update({
+              where: { product_id: item.product_id! },
+              data: {
+                cost_price_cents: newCost,
+                margin_cents: marginCents,
+                margin_pct: new Prisma.Decimal(marginPct.toFixed(4)),
+              },
+            });
+          }
+        }
       }
 
       await tx.nfEntrada.update({
