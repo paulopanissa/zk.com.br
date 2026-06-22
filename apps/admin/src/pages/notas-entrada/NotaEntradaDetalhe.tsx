@@ -878,11 +878,38 @@ export function NotaEntradaDetalhe() {
                     <button
                       key={p.id}
                       type="button"
-                      onClick={() => {
-                        setItemForm((f) => ({ ...f, product_id: p.id }))
-                        setProductSearch(p.name)
+                      onClick={async () => {
+                        const productId = p.id
+                        const productName = p.name
+                        setItemForm((f) => ({ ...f, product_id: productId }))
+                        setProductSearch(productName)
                         setProducts([])
                         setNoResultsFor(null)
+                        // Pre-fill lot fields from the most recent lot of this product
+                        try {
+                          const { data } = await api.get<{
+                            data: Array<{
+                              code: string
+                              expires_at: string | null
+                              manufactured_at: string | null
+                            }>
+                          }>(`/lots/by-product/${productId}`, { params: { limit: 1 } })
+                          const lot = data.data[0]
+                          if (lot) {
+                            setItemForm((f) => ({
+                              ...f,
+                              lote_numero: f.lote_numero || lot.code,
+                              data_validade:
+                                f.data_validade ||
+                                (lot.expires_at ? lot.expires_at.split('T')[0] : ''),
+                              data_fabricacao:
+                                f.data_fabricacao ||
+                                (lot.manufactured_at ? lot.manufactured_at.split('T')[0] : ''),
+                            }))
+                          }
+                        } catch {
+                          // non-critical — lot pre-fill failure does not block the form
+                        }
                       }}
                       className={cn(
                         'w-full text-left px-3 py-2 text-sm hover:bg-surface-alt transition-colors',

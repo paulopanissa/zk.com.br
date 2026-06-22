@@ -217,7 +217,15 @@ export class NfEntradaService {
       if (!brand) throw new NotFoundException('Marca não encontrada nesta unidade');
     }
 
-    return this.repository.updateItem(itemId, id, unitId, {
+    // Fetch current item to know existing product_id (for brand propagation)
+    const currentItem = dto.brand_id
+      ? await this.prisma.nfEntradaItem.findUnique({
+          where: { id: itemId },
+          select: { product_id: true },
+        })
+      : null;
+
+    const updatedItem = await this.repository.updateItem(itemId, id, unitId, {
       ...(dto.product_id !== undefined && { product_id: dto.product_id }),
       ...(dto.brand_id !== undefined && { brand_id: dto.brand_id }),
       ...(dto.lote_numero !== undefined && { lote_numero: dto.lote_numero }),
@@ -228,6 +236,19 @@ export class NfEntradaService {
         data_fabricacao: dto.data_fabricacao ? new Date(dto.data_fabricacao) : null,
       }),
     });
+
+    // Propagate brand to the linked product so the user does not need to redo it in product registration
+    if (dto.brand_id) {
+      const effectiveProductId = dto.product_id ?? currentItem?.product_id;
+      if (effectiveProductId) {
+        await this.prisma.product.updateMany({
+          where: { id: effectiveProductId, unidade_id: unitId },
+          data: { brand_id: dto.brand_id },
+        });
+      }
+    }
+
+    return updatedItem;
   }
 
   async bulkSetBrand(id: string, dto: BulkBrandDto, user: JwtSystemPayload): Promise<{ updated: number }> {
