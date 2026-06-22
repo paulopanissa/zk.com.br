@@ -6,7 +6,6 @@ import {
   HttpCode,
   HttpStatus,
   Param,
-  ParseIntPipe,
   ParseUUIDPipe,
   Patch,
   Post,
@@ -55,11 +54,10 @@ export class LotsController {
   @ApiResponse({ status: 200, description: 'Lista paginada de lotes do produto em ordem FIFO' })
   findByProduct(
     @Param('productId', ParseUUIDPipe) productId: string,
-    @Query('page', new ParseIntPipe({ optional: true })) page: number = 1,
-    @Query('limit', new ParseIntPipe({ optional: true })) limit: number = 20,
+    @Query() query: QueryLotsDto,
     @CurrentUser() user: JwtSystemPayload,
   ) {
-    return this.service.findByProduct(productId, { page, limit }, user);
+    return this.service.findByProduct(productId, { page: query.page ?? 1, limit: query.limit ?? 20 }, user);
   }
 
   // ─── CRUD ─────────────────────────────────────────────────────────────────
