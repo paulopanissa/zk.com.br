@@ -225,7 +225,7 @@ export class NfEntradaService {
         })
       : null;
 
-    const updatedItem = await this.repository.updateItem(itemId, id, unitId, {
+    const itemData = {
       ...(dto.product_id !== undefined && { product_id: dto.product_id }),
       ...(dto.brand_id !== undefined && { brand_id: dto.brand_id }),
       ...(dto.lote_numero !== undefined && { lote_numero: dto.lote_numero }),
@@ -235,18 +235,30 @@ export class NfEntradaService {
       ...(dto.data_fabricacao !== undefined && {
         data_fabricacao: dto.data_fabricacao ? new Date(dto.data_fabricacao) : null,
       }),
-    });
+    };
 
-    // Propagate brand to the linked product so the user does not need to redo it in product registration
-    if (dto.brand_id) {
-      const effectiveProductId = dto.product_id ?? currentItem?.product_id;
-      if (effectiveProductId) {
-        await this.prisma.product.updateMany({
-          where: { id: effectiveProductId, unidade_id: unitId },
-          data: { brand_id: dto.brand_id },
-        });
-      }
-    }
+    const effectiveProductId = dto.brand_id
+      ? (dto.product_id ?? currentItem?.product_id)
+      : null;
+
+    const [updatedItem] = await this.prisma.$transaction([
+      this.prisma.nfEntradaItem.update({
+        where: {
+          id: itemId,
+          nf_entrada_id: id,
+          nf_entrada: { unidade_id: unitId },
+        },
+        data: itemData,
+      }),
+      ...(dto.brand_id && effectiveProductId
+        ? [
+            this.prisma.product.updateMany({
+              where: { id: effectiveProductId, unidade_id: unitId },
+              data: { brand_id: dto.brand_id },
+            }),
+          ]
+        : []),
+    ]);
 
     return updatedItem;
   }

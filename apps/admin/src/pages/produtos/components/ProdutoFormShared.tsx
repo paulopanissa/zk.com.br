@@ -533,6 +533,7 @@ export function PricingCalculator({
                   <span className="text-[10px] font-medium text-muted-foreground">
                     Centro de custo
                   </span>
+                  {/* __none__ sentinel: Radix Select requires a non-empty string value; maps to "no selection" (empty string) in state */}
                   <Select
                     value={selectedCcId || '__none__'}
                     onValueChange={(v) => handleCcSelect(v === '__none__' ? '' : v)}
@@ -556,6 +557,7 @@ export function PricingCalculator({
                   <span className="text-[10px] font-medium text-muted-foreground">
                     Método de pagamento
                   </span>
+                  {/* __none__ sentinel: same pattern as cost center — maps empty selection to a non-empty string for Radix */}
                   <Select
                     value={selectedMethod || '__none__'}
                     onValueChange={(v) => handleMethodSelect(v === '__none__' ? '' : v)}
