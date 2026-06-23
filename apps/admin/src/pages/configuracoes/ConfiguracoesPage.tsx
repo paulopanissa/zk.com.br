@@ -1250,6 +1250,15 @@ function TabEntregas() {
     setClientSecret('')
     setCustomerId('')
     setWebhookSecret('')
+    // Reset threshold and active from current saved config so cancel+reopen shows real values
+    if (config) {
+      setThresholdBrl(
+        config.free_shipping_threshold_centavos != null
+          ? String((config.free_shipping_threshold_centavos / 100).toFixed(2))
+          : '',
+      )
+      setActive(config.active)
+    }
     setSaveError(null)
     setShowForm(true)
   }
@@ -1257,9 +1266,14 @@ function TabEntregas() {
   async function handleSave() {
     setSaveError(null)
     setSaving(true)
-    const threshold = thresholdBrl.trim()
-      ? Math.round(parseFloat(thresholdBrl.replace(',', '.')) * 100)
-      : null
+    const thresholdRaw = thresholdBrl.trim()
+    const thresholdParsed = thresholdRaw ? parseFloat(thresholdRaw.replace(',', '.')) : NaN
+    if (thresholdRaw && (isNaN(thresholdParsed) || thresholdParsed < 0)) {
+      setSaveError('Valor de frete grátis inválido — use ponto ou vírgula como separador decimal (ex: 150,00).')
+      setSaving(false)
+      return
+    }
+    const threshold = thresholdRaw ? Math.round(thresholdParsed * 100) : null
 
     try {
       if (config === null) {
@@ -1512,18 +1526,18 @@ function TabEntregas() {
                 <Input
                   placeholder="Rua das Flores, 123 — Bairro, Cidade — SP"
                   value={quoteDropoff}
-                  onChange={(e) => setQuoteDropoff(e.target.value)}
+                  onChange={(e) => { setQuoteDropoff(e.target.value); setQuoteResult(null) }}
                   className="h-8 text-xs"
                 />
               </div>
               <div className="space-y-1">
                 <label className="text-xs font-medium text-foreground">
-                  Telefone do destinatário (E.164) <span className="text-destructive">*</span>
+                  Telefone do destinatário (+55 E.164) <span className="text-destructive">*</span>
                 </label>
                 <Input
                   placeholder="+5511999999999"
                   value={quotePhone}
-                  onChange={(e) => setQuotePhone(e.target.value)}
+                  onChange={(e) => { setQuotePhone(e.target.value); setQuoteResult(null) }}
                   className="h-8 text-xs font-mono"
                 />
               </div>
@@ -1534,7 +1548,7 @@ function TabEntregas() {
                 <Input
                   placeholder="150,00"
                   value={quoteCartBrl}
-                  onChange={(e) => setQuoteCartBrl(e.target.value)}
+                  onChange={(e) => { setQuoteCartBrl(e.target.value); setQuoteResult(null) }}
                   className="h-8 text-xs"
                 />
               </div>
@@ -1545,7 +1559,7 @@ function TabEntregas() {
                 <Input
                   placeholder="Rua da Loja, 456 — Bairro, Cidade — SP"
                   value={quotePickup}
-                  onChange={(e) => setQuotePickup(e.target.value)}
+                  onChange={(e) => { setQuotePickup(e.target.value); setQuoteResult(null) }}
                   className="h-8 text-xs"
                 />
               </div>
@@ -1592,7 +1606,7 @@ function TabEntregas() {
                   )}
                   {quoteResult.expires_at && (
                     <div className="flex items-center gap-1.5 text-muted-foreground text-xs">
-                      <Phone className="h-3.5 w-3.5" />
+                      <Clock className="h-3.5 w-3.5" />
                       Cotação válida até{' '}
                       {new Date(quoteResult.expires_at).toLocaleTimeString('pt-BR', {
                         hour: '2-digit',
@@ -1622,7 +1636,7 @@ function TabEntregas() {
             </p>
             <div className="flex items-center gap-2 rounded-lg bg-muted/50 border border-border px-3 py-2">
               <code className="text-xs font-mono text-foreground break-all flex-1">
-                {window.location.origin.replace(/:\d+$/, '')}/entregas/webhook/uber/
+                {(import.meta.env.VITE_API_URL as string ?? 'http://localhost:3040/api/v1').replace(/\/api\/v\d+$/, '')}/entregas/webhook/uber/
                 <span className="text-muted-foreground">{'{unitId}'}</span>
               </code>
             </div>
