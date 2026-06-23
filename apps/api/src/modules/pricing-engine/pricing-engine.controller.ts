@@ -34,7 +34,8 @@ export class PricingEngineController {
   })
   @ApiResponse({
     status: 422,
-    description: 'margem_desejada_bps >= 10000 é inválido',
+    description:
+      'A soma de despesas variáveis (impostos + taxa_cartao + comissao + custo_operacional_variavel) + margem_desejada_bps ≥ 10000 (100%) é inválida.',
   })
   calculate(@Body() dto: PricingInputDto): PricingResultDto {
     return this.service.calculate(dto);

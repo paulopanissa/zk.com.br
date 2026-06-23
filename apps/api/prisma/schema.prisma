@@ -347,13 +347,14 @@ enum TipoCusto {
 }
 
 model CostCenter {
-  id         String   @id @default(uuid())
-  unidade_id String
-  nome       String   @db.VarChar(120)
-  descricao  String?  @db.Text
-  ativo      Boolean  @default(true)
-  created_at DateTime @default(now())
-  updated_at DateTime @updatedAt
+  id                         String   @id @default(uuid())
+  unidade_id                 String
+  nome                       String   @db.VarChar(120)
+  descricao                  String?  @db.Text
+  faturamento_mensal_centavos Int?
+  ativo                      Boolean  @default(true)
+  created_at                 DateTime @default(now())
+  updated_at                 DateTime @updatedAt
 
   unit  Unit       @relation(fields: [unidade_id], references: [id])
   items CostItem[]

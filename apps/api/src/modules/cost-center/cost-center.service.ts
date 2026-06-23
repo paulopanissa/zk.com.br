@@ -39,6 +39,7 @@ export class CostCenterService {
       unidade_id: unitId,
       nome: dto.nome.trim(),
       descricao: dto.descricao,
+      faturamento_mensal_centavos: dto.faturamento_mensal_centavos ?? null,
     });
   }
 
@@ -89,6 +90,10 @@ export class CostCenterService {
 
     if (dto.ativo !== undefined) {
       updateData.ativo = dto.ativo;
+    }
+
+    if (dto.faturamento_mensal_centavos !== undefined) {
+      updateData.faturamento_mensal_centavos = dto.faturamento_mensal_centavos ?? null;
     }
 
     return this.repository.update(id, updateData);

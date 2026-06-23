@@ -217,7 +217,15 @@ export class NfEntradaService {
       if (!brand) throw new NotFoundException('Marca não encontrada nesta unidade');
     }
 
-    return this.repository.updateItem(itemId, id, unitId, {
+    // Fetch current item to know existing product_id (for brand propagation)
+    const currentItem = dto.brand_id
+      ? await this.prisma.nfEntradaItem.findUnique({
+          where: { id: itemId },
+          select: { product_id: true },
+        })
+      : null;
+
+    const itemData = {
       ...(dto.product_id !== undefined && { product_id: dto.product_id }),
       ...(dto.brand_id !== undefined && { brand_id: dto.brand_id }),
       ...(dto.lote_numero !== undefined && { lote_numero: dto.lote_numero }),
@@ -227,7 +235,32 @@ export class NfEntradaService {
       ...(dto.data_fabricacao !== undefined && {
         data_fabricacao: dto.data_fabricacao ? new Date(dto.data_fabricacao) : null,
       }),
-    });
+    };
+
+    const effectiveProductId = dto.brand_id
+      ? (dto.product_id ?? currentItem?.product_id)
+      : null;
+
+    const [updatedItem] = await this.prisma.$transaction([
+      this.prisma.nfEntradaItem.update({
+        where: {
+          id: itemId,
+          nf_entrada_id: id,
+          nf_entrada: { unidade_id: unitId },
+        },
+        data: itemData,
+      }),
+      ...(dto.brand_id && effectiveProductId
+        ? [
+            this.prisma.product.updateMany({
+              where: { id: effectiveProductId, unidade_id: unitId },
+              data: { brand_id: dto.brand_id },
+            }),
+          ]
+        : []),
+    ]);
+
+    return updatedItem;
   }
 
   async bulkSetBrand(id: string, dto: BulkBrandDto, user: JwtSystemPayload): Promise<{ updated: number }> {
@@ -339,6 +372,28 @@ export class NfEntradaService {
           },
           update: {},
         });
+
+        // Atualiza preço de custo do produto a partir da NF (apenas se ainda não definido)
+        if (item.valor_unitario > 0) {
+          const pricing = await tx.productPricing.findUnique({
+            where: { product_id: item.product_id! },
+            select: { cost_price_cents: true, sale_price_cents: true },
+          });
+          if (pricing && pricing.cost_price_cents === 0) {
+            const newCost = item.valor_unitario;
+            const sale = pricing.sale_price_cents;
+            const marginCents = sale - newCost;
+            const marginPct = sale > 0 ? (marginCents / sale) * 100 : 0;
+            await tx.productPricing.update({
+              where: { product_id: item.product_id! },
+              data: {
+                cost_price_cents: newCost,
+                margin_cents: marginCents,
+                margin_pct: new Prisma.Decimal(marginPct.toFixed(4)),
+              },
+            });
+          }
+        }
       }
 
       await tx.nfEntrada.update({

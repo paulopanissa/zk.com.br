@@ -1,19 +1,22 @@
 import { ApiProperty } from '@nestjs/swagger';
 
 export class PricingBreakdownDto {
-  @ApiProperty({ description: 'Custo base = custo + frete + operacional fixo (centavos)', example: 5700 })
+  @ApiProperty({ description: 'Custo base = custo_compra + frete_entrada + custo_fixo_rateado (centavos)', example: 5700 })
   custo_base_centavos!: number;
 
-  @ApiProperty({ description: 'Parcela de impostos calculada sobre o custo base (centavos)', example: 684 })
+  @ApiProperty({ description: 'Impostos sobre o preço de venda (centavos)', example: 684 })
   custo_impostos_centavos!: number;
 
-  @ApiProperty({ description: 'Parcela do custo operacional variável (centavos)', example: 171 })
+  @ApiProperty({ description: 'Custo operacional variável sobre o preço de venda (centavos)', example: 171 })
   custo_operacional_var_centavos!: number;
 
-  @ApiProperty({ description: 'Parcela da taxa de cartão (centavos)', example: 142 })
+  @ApiProperty({ description: 'Taxa de cartão/gateway sobre o preço de venda (centavos)', example: 142 })
   custo_cartao_centavos!: number;
 
-  @ApiProperty({ description: 'Frete em centavos (componente já incluído no custo base)', example: 500 })
+  @ApiProperty({ description: 'Comissão do vendedor sobre o preço de venda (centavos)', example: 0 })
+  custo_comissao_centavos!: number;
+
+  @ApiProperty({ description: 'Frete de compra em centavos (já incluído no custo base)', example: 500 })
   frete_centavos!: number;
 }
 

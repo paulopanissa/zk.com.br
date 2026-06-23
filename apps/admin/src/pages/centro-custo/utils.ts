@@ -2,6 +2,7 @@ export interface CostCenter {
   id: string
   nome: string
   descricao: string | null
+  faturamento_mensal_centavos: number | null
   ativo: boolean
   created_at: string
 }
