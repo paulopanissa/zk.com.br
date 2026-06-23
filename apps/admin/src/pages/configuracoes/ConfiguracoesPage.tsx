@@ -16,6 +16,11 @@ import {
   ChevronDown,
   ChevronRight,
   Wifi,
+  Truck,
+  MapPin,
+  Clock,
+  Phone,
+  Package,
 } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
@@ -98,6 +103,22 @@ interface TaxProfilesPage {
   total: number
   page: number
   limit: number
+}
+
+interface DeliveryConfig {
+  id: string
+  provider: 'UBER_DIRECT' | 'FRETE_GRATIS'
+  active: boolean
+  free_shipping_threshold_centavos: number | null
+  updated_at: string
+}
+
+interface QuoteResult {
+  fee_centavos: number
+  eta_seconds: number
+  quote_id: string | null
+  expires_at: string | null
+  provider: 'UBER_DIRECT' | 'FRETE_GRATIS'
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -695,6 +716,10 @@ function ChannelCard({
     setAmbiente(config?.ambiente ?? 'SANDBOX')
   }, [config])
 
+  const selectedProvider = providers.find((p) => p.id === providerId)
+  const isMercadoPago = selectedProvider?.slug?.toUpperCase().includes('MERCADO_PAGO')
+  const showPointInfo = canal === 'PDV' && isMercadoPago
+
   async function handleSave() {
     if (!providerId) {
       setError('Selecione um provedor')
@@ -736,6 +761,12 @@ function ChannelCard({
         )}
       </div>
 
+      {canal === 'ECOMMERCE' && !providerId && (
+        <p className="text-[11px] text-muted-foreground">
+          Recomendado: <strong>Asaas</strong> (PIX, boleto, cartão) ou <strong>Mercado Pago</strong>
+        </p>
+      )}
+
       <div className="space-y-2">
         <Select value={providerId} onValueChange={setProviderId}>
           <SelectTrigger className="h-8 text-xs">
@@ -760,6 +791,22 @@ function ChannelCard({
           </SelectContent>
         </Select>
       </div>
+
+      {/* PDV + Mercado Pago → maquininha Point habilitada */}
+      {showPointInfo && (
+        <div className="rounded-lg border border-blue-200 bg-blue-50 dark:bg-blue-950/30 dark:border-blue-800 px-3 py-2.5 space-y-1">
+          <p className="text-xs font-medium text-blue-700 dark:text-blue-300 flex items-center gap-1.5">
+            <Wifi className="h-3.5 w-3.5" />
+            Maquininha Point habilitada
+          </p>
+          <p className="text-[11px] text-blue-600 dark:text-blue-400">
+            <strong>Online:</strong> valor enviado automaticamente à maquininha via API Point.
+          </p>
+          <p className="text-[11px] text-blue-600 dark:text-blue-400">
+            <strong>Offline:</strong> maquininha opera em modo autônomo; o PDV registra o pagamento para conciliação posterior.
+          </p>
+        </div>
+      )}
 
       {error && <p className="text-xs text-destructive">{error}</p>}
 
@@ -877,6 +924,14 @@ function MethodsSection({
                               <span className="text-sm font-medium text-foreground">
                                 {METODO_LABEL[m.metodo]}
                               </span>
+                              {m.metodo === 'MAQUININHA_POINT' && (
+                                <Badge
+                                  variant="outline"
+                                  className="text-[10px] border-blue-300 text-blue-600 bg-blue-50 dark:bg-blue-950/30 shrink-0"
+                                >
+                                  Point · online/offline
+                                </Badge>
+                              )}
                               {provider && (
                                 <span className="text-xs text-muted-foreground truncate">
                                   {provider.nome_exibicao}
@@ -1169,6 +1224,467 @@ function Field({ label, value }: { label: string; value: string }) {
   )
 }
 
+// ─── Tab Entregas ─────────────────────────────────────────────────────────────
+
+function TabEntregas() {
+  const [config, setConfig] = useState<DeliveryConfig | null | undefined>(undefined)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
+  const [showForm, setShowForm] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+
+  // Credential fields (write-only; never pre-filled from API)
+  const [clientId, setClientId] = useState('')
+  const [clientSecret, setClientSecret] = useState('')
+  const [customerId, setCustomerId] = useState('')
+  const [webhookSecret, setWebhookSecret] = useState('')
+  const [thresholdBrl, setThresholdBrl] = useState('')
+  const [active, setActive] = useState(true)
+
+  // Quote simulator
+  const [quoteDropoff, setQuoteDropoff] = useState('')
+  const [quotePhone, setQuotePhone] = useState('')
+  const [quoteCartBrl, setQuoteCartBrl] = useState('')
+  const [quotePickup, setQuotePickup] = useState('')
+  const [quoting, setQuoting] = useState(false)
+  const [quoteResult, setQuoteResult] = useState<QuoteResult | null>(null)
+  const [quoteError, setQuoteError] = useState<string | null>(null)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    setError(false)
+    try {
+      const { data } = await api.get<DeliveryConfig>('/entregas/config')
+      setConfig(data)
+      setActive(data.active)
+      setThresholdBrl(
+        data.free_shipping_threshold_centavos != null
+          ? String((data.free_shipping_threshold_centavos / 100).toFixed(2))
+          : '',
+      )
+    } catch (err: unknown) {
+      const status = (err as { response?: { status?: number } })?.response?.status
+      if (status === 404) {
+        setConfig(null)
+      } else {
+        setError(true)
+      }
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    load()
+  }, [load])
+
+  function openForm() {
+    setClientId('')
+    setClientSecret('')
+    setCustomerId('')
+    setWebhookSecret('')
+    // Reset threshold and active from current saved config so cancel+reopen shows real values
+    if (config) {
+      setThresholdBrl(
+        config.free_shipping_threshold_centavos != null
+          ? String((config.free_shipping_threshold_centavos / 100).toFixed(2))
+          : '',
+      )
+      setActive(config.active)
+    }
+    setSaveError(null)
+    setShowForm(true)
+  }
+
+  async function handleSave() {
+    setSaveError(null)
+    setSaving(true)
+    const thresholdRaw = thresholdBrl.trim()
+    const thresholdParsed = thresholdRaw ? parseFloat(thresholdRaw.replace(',', '.')) : NaN
+    if (thresholdRaw && (isNaN(thresholdParsed) || thresholdParsed < 0)) {
+      setSaveError('Valor de frete grátis inválido — use ponto ou vírgula como separador decimal (ex: 150,00).')
+      setSaving(false)
+      return
+    }
+    const threshold = thresholdRaw ? Math.round(thresholdParsed * 100) : null
+
+    try {
+      if (config === null) {
+        // Create — all credential fields required
+        if (!clientId || !clientSecret || !customerId || !webhookSecret) {
+          setSaveError('Preencha todos os campos de credencial para criar a configuração.')
+          setSaving(false)
+          return
+        }
+        await api.post('/entregas/config', {
+          client_id: clientId,
+          client_secret: clientSecret,
+          customer_id: customerId,
+          webhook_secret: webhookSecret,
+          free_shipping_threshold_centavos: threshold,
+          active,
+        })
+      } else {
+        // Update — send only non-empty credential fields + always threshold + active
+        const body: Record<string, unknown> = { active, free_shipping_threshold_centavos: threshold }
+        if (clientId) body.client_id = clientId
+        if (clientSecret) body.client_secret = clientSecret
+        if (customerId) body.customer_id = customerId
+        if (webhookSecret) body.webhook_secret = webhookSecret
+        await api.patch('/entregas/config', body)
+      }
+      setShowForm(false)
+      await load()
+    } catch {
+      setSaveError('Erro ao salvar configuração. Verifique os dados e tente novamente.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleQuote() {
+    setQuoteError(null)
+    setQuoteResult(null)
+    setQuoting(true)
+    const cartCents = Math.round(parseFloat(quoteCartBrl.replace(',', '.')) * 100)
+    if (isNaN(cartCents) || cartCents < 0) {
+      setQuoteError('Total do carrinho inválido.')
+      setQuoting(false)
+      return
+    }
+    try {
+      const body: Record<string, unknown> = {
+        dropoff_address: quoteDropoff,
+        recipient_phone: quotePhone,
+        cart_total_centavos: cartCents,
+      }
+      if (quotePickup) body.pickup_address = quotePickup
+      const { data } = await api.post<QuoteResult>('/entregas/quote', body)
+      setQuoteResult(data)
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+      setQuoteError(msg ?? 'Erro ao cotar frete. Verifique os dados e a configuração.')
+    } finally {
+      setQuoting(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="space-y-4">
+        <SkeletonCard />
+      </div>
+    )
+  }
+
+  if (error) return <ErrorState onRetry={load} />
+
+  const isCreating = config === null
+  const hasConfig = config != null
+
+  return (
+    <div className="space-y-4">
+      {/* ── Config card ── */}
+      <SectionCard
+        icon={Truck}
+        title="Configuração de entrega"
+        action={
+          hasConfig && !showForm ? (
+            <Button variant="outline" size="sm" onClick={openForm}>
+              Editar
+            </Button>
+          ) : undefined
+        }
+      >
+        {/* Empty state */}
+        {isCreating && !showForm && (
+          <div className="flex flex-col items-center gap-3 py-6 text-center">
+            <Package className="h-10 w-10 text-muted-foreground/40" />
+            <p className="text-sm text-muted-foreground">Nenhuma integração de entrega configurada</p>
+            <Button size="sm" onClick={openForm}>
+              <Plus className="h-3.5 w-3.5 mr-1.5" />
+              Configurar entregas
+            </Button>
+          </div>
+        )}
+
+        {/* Config summary */}
+        {hasConfig && !showForm && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Badge variant="outline" className="text-xs uppercase tracking-wide">
+                  {config.provider === 'UBER_DIRECT' ? 'Uber Direct' : 'Frete Grátis'}
+                </Badge>
+                {config.active ? (
+                  <Badge className="text-xs bg-success/10 text-success border-success/30">Ativo</Badge>
+                ) : (
+                  <Badge variant="outline" className="text-xs text-muted-foreground">Inativo</Badge>
+                )}
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                Atualizado em {new Date(config.updated_at).toLocaleDateString('pt-BR')}
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Credenciais</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Configuradas (ocultas por segurança)</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Frete grátis a partir de</p>
+                <p className="text-sm font-medium mt-0.5">
+                  {config.free_shipping_threshold_centavos != null
+                    ? `R$ ${(config.free_shipping_threshold_centavos / 100).toFixed(2)}`
+                    : 'Desativado'}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Inline form */}
+        {showForm && (
+          <div className="space-y-4">
+            <div className="rounded-lg bg-muted/40 border border-border px-4 py-3 text-xs text-muted-foreground">
+              {isCreating
+                ? 'Preencha as credenciais do Uber Direct (painel → Developers → Apps).'
+                : 'Deixe os campos de credencial em branco para manter os valores atuais.'}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-foreground">Client ID {isCreating && <span className="text-destructive">*</span>}</label>
+                <Input
+                  type="password"
+                  placeholder={isCreating ? 'client_id' : '••••• (manter atual)'}
+                  value={clientId}
+                  onChange={(e) => setClientId(e.target.value)}
+                  className="h-8 text-xs font-mono"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-foreground">Client Secret {isCreating && <span className="text-destructive">*</span>}</label>
+                <Input
+                  type="password"
+                  placeholder={isCreating ? 'client_secret' : '••••• (manter atual)'}
+                  value={clientSecret}
+                  onChange={(e) => setClientSecret(e.target.value)}
+                  className="h-8 text-xs font-mono"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-foreground">Customer ID {isCreating && <span className="text-destructive">*</span>}</label>
+                <Input
+                  type="password"
+                  placeholder={isCreating ? 'customer_id (UUID)' : '••••• (manter atual)'}
+                  value={customerId}
+                  onChange={(e) => setCustomerId(e.target.value)}
+                  className="h-8 text-xs font-mono"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-foreground">Webhook Secret {isCreating && <span className="text-destructive">*</span>}</label>
+                <Input
+                  type="password"
+                  placeholder={isCreating ? 'webhook_secret' : '••••• (manter atual)'}
+                  value={webhookSecret}
+                  onChange={(e) => setWebhookSecret(e.target.value)}
+                  className="h-8 text-xs font-mono"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-foreground">Frete grátis a partir de (R$)</label>
+                <Input
+                  placeholder="Ex: 150,00 — vazio para desativar"
+                  value={thresholdBrl}
+                  onChange={(e) => setThresholdBrl(e.target.value)}
+                  className="h-8 text-xs"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-foreground">Status</label>
+                <button
+                  type="button"
+                  onClick={() => setActive((v) => !v)}
+                  className="flex items-center gap-2 h-8 text-xs text-foreground"
+                >
+                  {active ? (
+                    <ToggleRight className="h-5 w-5 text-success" />
+                  ) : (
+                    <ToggleLeft className="h-5 w-5 text-muted-foreground" />
+                  )}
+                  {active ? 'Ativo' : 'Inativo'}
+                </button>
+              </div>
+            </div>
+
+            {saveError && (
+              <p className="text-xs text-destructive">{saveError}</p>
+            )}
+
+            <div className="flex gap-2">
+              <Button size="sm" onClick={handleSave} disabled={saving}>
+                {saving ? <RefreshCw className="h-3.5 w-3.5 animate-spin mr-1.5" /> : null}
+                {isCreating ? 'Criar configuração' : 'Salvar alterações'}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setShowForm(false)
+                  setSaveError(null)
+                }}
+                disabled={saving}
+              >
+                Cancelar
+              </Button>
+            </div>
+          </div>
+        )}
+      </SectionCard>
+
+      {/* ── Quote simulator (only when config exists and not editing) ── */}
+      {hasConfig && !showForm && (
+        <SectionCard icon={MapPin} title="Simulador de cotação">
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1 sm:col-span-2">
+                <label className="text-xs font-medium text-foreground">
+                  Endereço de entrega <span className="text-destructive">*</span>
+                </label>
+                <Input
+                  placeholder="Rua das Flores, 123 — Bairro, Cidade — SP"
+                  value={quoteDropoff}
+                  onChange={(e) => { setQuoteDropoff(e.target.value); setQuoteResult(null) }}
+                  className="h-8 text-xs"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-foreground">
+                  Telefone do destinatário (+55 E.164) <span className="text-destructive">*</span>
+                </label>
+                <Input
+                  placeholder="+5511999999999"
+                  value={quotePhone}
+                  onChange={(e) => { setQuotePhone(e.target.value); setQuoteResult(null) }}
+                  className="h-8 text-xs font-mono"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-foreground">
+                  Total do carrinho (R$) <span className="text-destructive">*</span>
+                </label>
+                <Input
+                  placeholder="150,00"
+                  value={quoteCartBrl}
+                  onChange={(e) => { setQuoteCartBrl(e.target.value); setQuoteResult(null) }}
+                  className="h-8 text-xs"
+                />
+              </div>
+              <div className="space-y-1 sm:col-span-2">
+                <label className="text-xs font-medium text-foreground">
+                  Endereço de coleta (opcional — usa endereço da unidade se vazio)
+                </label>
+                <Input
+                  placeholder="Rua da Loja, 456 — Bairro, Cidade — SP"
+                  value={quotePickup}
+                  onChange={(e) => { setQuotePickup(e.target.value); setQuoteResult(null) }}
+                  className="h-8 text-xs"
+                />
+              </div>
+            </div>
+
+            <Button
+              size="sm"
+              onClick={handleQuote}
+              disabled={quoting || !quoteDropoff || !quotePhone || !quoteCartBrl}
+            >
+              {quoting ? (
+                <RefreshCw className="h-3.5 w-3.5 animate-spin mr-1.5" />
+              ) : (
+                <Truck className="h-3.5 w-3.5 mr-1.5" />
+              )}
+              Cotar frete
+            </Button>
+
+            {quoteError && (
+              <p className="text-xs text-destructive">{quoteError}</p>
+            )}
+
+            {quoteResult && (
+              <div className="rounded-lg border border-border bg-muted/30 px-4 py-3 space-y-2">
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="text-xs">
+                    {quoteResult.provider === 'FRETE_GRATIS' ? 'Frete Grátis' : 'Uber Direct'}
+                  </Badge>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
+                  <div className="flex items-center gap-1.5">
+                    <Package className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span className="font-semibold">
+                      {quoteResult.fee_centavos === 0
+                        ? 'Grátis'
+                        : `R$ ${(quoteResult.fee_centavos / 100).toFixed(2)}`}
+                    </span>
+                  </div>
+                  {quoteResult.eta_seconds > 0 && (
+                    <div className="flex items-center gap-1.5 text-muted-foreground text-xs">
+                      <Clock className="h-3.5 w-3.5" />
+                      {Math.round(quoteResult.eta_seconds / 60)} min estimados
+                    </div>
+                  )}
+                  {quoteResult.expires_at && (
+                    <div className="flex items-center gap-1.5 text-muted-foreground text-xs">
+                      <Clock className="h-3.5 w-3.5" />
+                      Cotação válida até{' '}
+                      {new Date(quoteResult.expires_at).toLocaleTimeString('pt-BR', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </div>
+                  )}
+                </div>
+                {quoteResult.quote_id && (
+                  <p className="text-[10px] text-muted-foreground font-mono">
+                    Quote ID: {quoteResult.quote_id}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        </SectionCard>
+      )}
+
+      {/* ── Webhook info (only when config exists) ── */}
+      {hasConfig && !showForm && (
+        <SectionCard icon={Wifi} title="Webhook Uber Direct">
+          <div className="space-y-2">
+            <p className="text-xs text-muted-foreground">
+              Registre a URL abaixo no painel do Uber Direct (Developers → Webhooks) para receber
+              atualizações de status de entrega em tempo real.
+            </p>
+            <div className="flex items-center gap-2 rounded-lg bg-muted/50 border border-border px-3 py-2">
+              <code className="text-xs font-mono text-foreground break-all flex-1">
+                {(import.meta.env.VITE_API_URL as string ?? 'http://localhost:3040/api/v1').replace(/\/api\/v\d+$/, '')}/entregas/webhook/uber/
+                <span className="text-muted-foreground">{'{unitId}'}</span>
+              </code>
+            </div>
+            <p className="text-[10px] text-muted-foreground">
+              Substitua <code className="font-mono">{'{unitId}'}</code> pelo UUID da sua unidade
+              (visível em Empresa → Unidades).
+            </p>
+          </div>
+        </SectionCard>
+      )}
+    </div>
+  )
+}
+
 function TabGeral() {
   return (
     <div className="space-y-4">
@@ -1217,7 +1733,7 @@ export function ConfiguracoesPage() {
     <div className="p-6 space-y-5">
       <div>
         <h1 className="text-2xl font-semibold text-foreground">Configurações</h1>
-        <p className="text-sm text-muted-foreground mt-1">Fiscal, pagamentos e sistema</p>
+        <p className="text-sm text-muted-foreground mt-1">Fiscal, pagamentos, entregas e sistema</p>
       </div>
 
       <Tabs defaultValue="pagamento">
@@ -1230,6 +1746,10 @@ export function ConfiguracoesPage() {
             <CreditCard className="h-3.5 w-3.5" />
             Pagamento
           </TabsTrigger>
+          <TabsTrigger value="entregas" className="flex items-center gap-1.5">
+            <Truck className="h-3.5 w-3.5" />
+            Entregas
+          </TabsTrigger>
           <TabsTrigger value="geral" className="flex items-center gap-1.5">
             <Cog className="h-3.5 w-3.5" />
             Geral
@@ -1241,6 +1761,9 @@ export function ConfiguracoesPage() {
         </TabsContent>
         <TabsContent value="pagamento">
           <TabPagamento />
+        </TabsContent>
+        <TabsContent value="entregas">
+          <TabEntregas />
         </TabsContent>
         <TabsContent value="geral">
           <TabGeral />
