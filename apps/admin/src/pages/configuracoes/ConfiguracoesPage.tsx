@@ -716,6 +716,10 @@ function ChannelCard({
     setAmbiente(config?.ambiente ?? 'SANDBOX')
   }, [config])
 
+  const selectedProvider = providers.find((p) => p.id === providerId)
+  const isMercadoPago = selectedProvider?.slug?.toUpperCase().includes('MERCADO_PAGO')
+  const showPointInfo = canal === 'PDV' && isMercadoPago
+
   async function handleSave() {
     if (!providerId) {
       setError('Selecione um provedor')
@@ -757,6 +761,12 @@ function ChannelCard({
         )}
       </div>
 
+      {canal === 'ECOMMERCE' && !providerId && (
+        <p className="text-[11px] text-muted-foreground">
+          Recomendado: <strong>Asaas</strong> (PIX, boleto, cartão) ou <strong>Mercado Pago</strong>
+        </p>
+      )}
+
       <div className="space-y-2">
         <Select value={providerId} onValueChange={setProviderId}>
           <SelectTrigger className="h-8 text-xs">
@@ -781,6 +791,22 @@ function ChannelCard({
           </SelectContent>
         </Select>
       </div>
+
+      {/* PDV + Mercado Pago → maquininha Point habilitada */}
+      {showPointInfo && (
+        <div className="rounded-lg border border-blue-200 bg-blue-50 dark:bg-blue-950/30 dark:border-blue-800 px-3 py-2.5 space-y-1">
+          <p className="text-xs font-medium text-blue-700 dark:text-blue-300 flex items-center gap-1.5">
+            <Wifi className="h-3.5 w-3.5" />
+            Maquininha Point habilitada
+          </p>
+          <p className="text-[11px] text-blue-600 dark:text-blue-400">
+            <strong>Online:</strong> valor enviado automaticamente à maquininha via API Point.
+          </p>
+          <p className="text-[11px] text-blue-600 dark:text-blue-400">
+            <strong>Offline:</strong> maquininha opera em modo autônomo; o PDV registra o pagamento para conciliação posterior.
+          </p>
+        </div>
+      )}
 
       {error && <p className="text-xs text-destructive">{error}</p>}
 
@@ -898,6 +924,14 @@ function MethodsSection({
                               <span className="text-sm font-medium text-foreground">
                                 {METODO_LABEL[m.metodo]}
                               </span>
+                              {m.metodo === 'MAQUININHA_POINT' && (
+                                <Badge
+                                  variant="outline"
+                                  className="text-[10px] border-blue-300 text-blue-600 bg-blue-50 dark:bg-blue-950/30 shrink-0"
+                                >
+                                  Point · online/offline
+                                </Badge>
+                              )}
                               {provider && (
                                 <span className="text-xs text-muted-foreground truncate">
                                   {provider.nome_exibicao}
